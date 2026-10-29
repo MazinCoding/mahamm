@@ -1,0 +1,17 @@
+{% extends "bare.njk" %}
+{% block title %}{{ t('auth.twoFactorTitle') }}{% endblock %}
+{% block content %}
+<h1>{{ t('auth.twoFactorTitle') }}</h1>
+<p class="sub">{{ t('auth.twoFactorSub') }}</p>
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+<form class="form" method="post" action="/login/two-factor">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field">
+    <label for="code">{{ t('auth.code') }}</label>
+    <input id="code" class="input input-code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="40" autofocus>
+    <p class="hint">{{ t('auth.recoveryHint') }}</p>
+  </div>
+  <button class="btn btn-primary btn-block" type="submit">{{ t('auth.verify') }}</button>
+</form>
+<p class="auth-foot"><a class="link-sm" href="/login">{{ t('auth.startOver') }}</a></p>
+{% endblock %}

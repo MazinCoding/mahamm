@@ -1,0 +1,31 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('flag.title', { n: '#' + task.id }) }}{% endblock %}
+{% block content %}
+<a class="back" href="/tasks/{{ task.id }}"><svg class="flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>{{ t('common.back') }}</a>
+<div class="page-head"><div><h1>{{ t('flag.title', { n: '#' + task.id }) }}</h1><p class="sub">{{ task.title }}</p></div></div>
+<form class="form card-form" method="post" action="/tasks/{{ task.id }}/flag">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <p>{{ t('flag.intro', { p: task.creator_name }) }}</p>
+  <fieldset class="field">
+    <legend>{{ t('flag.whatsWrong') }}</legend>
+    <div class="radios">
+      {% for r in ['mistake', 'wrong', 'duplicate', 'other'] %}
+      <label class="radio-card">
+        <input type="radio" name="reason" value="{{ r }}" {% if values.reason == r %}checked{% endif %}>
+        <span class="strong">{{ t('flagReason.' + r) }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <div class="field">
+    <label for="note">{{ t('flag.note') }}</label>
+    <textarea id="note" class="input" name="note" rows="4" maxlength="1000" {% if errors.note %}aria-invalid="true" aria-describedby="err-note"{% endif %}>{{ values.note }}</textarea>
+    {{ m.field_error(errors, 'note') }}
+  </div>
+  <div class="form-actions">
+    <a class="btn btn-secondary" href="/tasks/{{ task.id }}">{{ t('common.cancel') }}</a>
+    <button class="btn btn-primary" type="submit">{{ t('flag.submit') }}</button>
+  </div>
+</form>
+{% endblock %}

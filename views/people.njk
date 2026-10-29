@@ -1,0 +1,105 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('people.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('people.title') }}</h1><p class="sub">{{ t('people.sub') }}</p></div></div>
+
+<form class="form card-form inline-form" method="post" action="/people/invite">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field grow">
+    <label for="inv-email">{{ t('people.email') }}</label>
+    <input id="inv-email" class="input" type="email" name="email" value="{{ values.email }}" maxlength="254" required dir="ltr" placeholder="name@company.om" {% if errors.email %}aria-invalid="true" aria-describedby="err-email"{% endif %}>
+    {% if errors.email %}<p class="error" id="err-email">{{ errors.email }}</p>{% endif %}
+  </div>
+  <div class="field">
+    <label for="inv-role">{{ t('people.role') }}</label>
+    <select id="inv-role" class="input" name="role">
+      <option value="member" {% if values.role == 'member' %}selected{% endif %}>{{ t('role.member') }}</option>
+      <option value="admin" {% if values.role == 'admin' %}selected{% endif %}>{{ t('role.admin') }}</option>
+    </select>
+  </div>
+  <div class="field"><button class="btn btn-primary" type="submit">{{ t('people.invite') }}</button></div>
+  <p class="hint full">{{ t('people.inviteHint') }}{% if not mail %} {{ t('people.noMail') }}{% endif %}</p>
+</form>
+
+{% if invites.length %}
+<h2 class="section-title">{{ t('people.pending') }}</h2>
+<div class="box table-wrap">
+  <table class="table">
+    <thead><tr><th scope="col">{{ t('people.email') }}</th><th scope="col">{{ t('people.role') }}</th><th scope="col">{{ t('people.invitedBy') }}</th><th scope="col">{{ t('people.expires') }}</th><th scope="col"><span class="sr-only">{{ t('people.actions') }}</span></th></tr></thead>
+    <tbody>
+      {% for i in invites %}
+      <tr>
+        <td dir="ltr">{{ i.email }}</td>
+        <td>{{ t('role.' + i.role) }}</td>
+        <td>{{ i.invited_by_name }}</td>
+        <td>{{ fmt.dateTime(i.expires_at) }}</td>
+        <td class="actions">
+          <form method="post" action="/people/invites/{{ i.id }}/revoke" class="inline" data-confirm="{{ t('people.confirmRevoke') }}">
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+            <button class="btn btn-link btn-sm" type="submit">{{ t('people.revoke') }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<h2 class="section-title">{{ t('people.members', { n: users.length }) }}</h2>
+<div class="box table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th scope="col">{{ t('people.person') }}</th><th scope="col">{{ t('people.role') }}</th><th scope="col">{{ t('people.status') }}</th>
+        <th scope="col">{{ t('people.twoStep') }}</th><th scope="col">{{ t('people.lastActive') }}</th><th scope="col">{{ t('people.completed') }}</th>
+        <th scope="col"><span class="sr-only">{{ t('people.actions') }}</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr{% if u.status == 'disabled' %} class="is-dim"{% endif %}>
+        <td><span class="person">{{ m.avatar(u) }}<span><span class="strong block">{{ u.name }}{% if u.id == user.id %} ({{ t('common.you') }}){% endif %}</span><span class="small muted block" dir="ltr">{{ u.email }}</span></span></span></td>
+        <td>
+          {% if u.id == user.id %}<span class="chip {{ 'c-teal' if u.role == 'admin' else 'c-gray' }}">{{ t('role.' + u.role) }}</span>{% else %}
+          <form method="post" action="/people/{{ u.id }}/role" class="inline role-form">
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+            <label class="sr-only" for="role-{{ u.id }}">{{ t('people.role') }}</label>
+            <select id="role-{{ u.id }}" class="input input-sm" name="role" data-autosubmit data-confirm="{{ t('people.confirmRole') }}">
+              <option value="member" {% if u.role == 'member' %}selected{% endif %}>{{ t('role.member') }}</option>
+              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>{{ t('role.admin') }}</option>
+            </select>
+            <noscript><button class="btn btn-link btn-sm" type="submit">{{ t('common.save') }}</button></noscript>
+          </form>
+          {% endif %}
+        </td>
+        <td><span class="chip {{ 'c-green' if u.status == 'active' else 'c-gray' }}">{{ t('people.state.' + u.status) }}</span></td>
+        <td>{% if u.totp_enabled %}<span class="ok-text">{{ t('common.on') }}</span>{% else %}<span class="warn-text">{{ t('common.off') }}</span>{% endif %}</td>
+        <td>{% if u.last_seen_at %}{{ fmt.ago(u.last_seen_at) }}{% else %}<em class="muted">{{ t('people.never') }}</em>{% endif %}</td>
+        <td>{{ u.completed }}</td>
+        <td class="actions">
+          {% if u.id != user.id %}
+            {% if u.status == 'active' %}
+            <form method="post" action="/people/{{ u.id }}/reset-link" class="inline">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+              <button class="btn btn-link btn-sm" type="submit">{{ t('people.resetLink') }}</button>
+            </form>
+            <form method="post" action="/people/{{ u.id }}/status" class="inline" data-confirm="{{ t('people.confirmDisable', { name: u.name }) }}">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}"><input type="hidden" name="status" value="disabled">
+              <button class="btn btn-link btn-sm danger" type="submit">{{ t('people.disable') }}</button>
+            </form>
+            {% else %}
+            <form method="post" action="/people/{{ u.id }}/status" class="inline">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}"><input type="hidden" name="status" value="active">
+              <button class="btn btn-link btn-sm" type="submit">{{ t('people.enable') }}</button>
+            </form>
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

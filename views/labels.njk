@@ -1,0 +1,46 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% set colors = ['red', 'blue', 'teal', 'amber', 'purple', 'gray', 'green', 'pink', 'yellow'] %}
+{% block title %}{{ t('labels.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('labels.title') }}</h1><p class="sub">{{ t('labels.sub') }}</p></div></div>
+
+<div class="box table-wrap">
+  <table class="table">
+    <thead><tr><th scope="col">{{ t('labels.preview') }}</th><th scope="col">{{ t('labels.english') }}</th><th scope="col">{{ t('labels.arabic') }}</th><th scope="col">{{ t('labels.color') }}</th><th scope="col">{{ t('labels.used') }}</th><th scope="col"><span class="sr-only">{{ t('people.actions') }}</span></th></tr></thead>
+    <tbody>
+      {% for l in labels %}
+      <tr>
+        <td>{{ m.label(l) }}</td>
+        <td><input form="label-{{ l.id }}" class="input input-sm" name="name_en" value="{{ l.name_en }}" maxlength="40" required aria-label="{{ t('labels.english') }}"></td>
+        <td><input form="label-{{ l.id }}" class="input input-sm" name="name_ar" value="{{ l.name_ar }}" maxlength="40" required dir="rtl" lang="ar" aria-label="{{ t('labels.arabic') }}"></td>
+        <td>
+          <select form="label-{{ l.id }}" class="input input-sm" name="color" aria-label="{{ t('labels.color') }}">
+            {% for c in colors %}<option value="{{ c }}" {% if l.color == c %}selected{% endif %}>{{ t('color.' + c) }}</option>{% endfor %}
+          </select>
+        </td>
+        <td>{{ l.used }}</td>
+        <td class="actions">
+          <form id="label-{{ l.id }}" method="post" action="/labels/{{ l.id }}" class="inline">
+            <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+            <button class="btn btn-link btn-sm" type="submit">{{ t('common.save') }}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<h2 class="section-title">{{ t('labels.add') }}</h2>
+<form class="form card-form inline-form" method="post" action="/labels">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field"><label for="new-en">{{ t('labels.english') }}</label><input id="new-en" class="input" name="name_en" maxlength="40" required></div>
+  <div class="field"><label for="new-ar">{{ t('labels.arabic') }}</label><input id="new-ar" class="input" name="name_ar" maxlength="40" required dir="rtl" lang="ar"></div>
+  <div class="field">
+    <label for="new-color">{{ t('labels.color') }}</label>
+    <select id="new-color" class="input" name="color">{% for c in colors %}<option value="{{ c }}">{{ t('color.' + c) }}</option>{% endfor %}</select>
+  </div>
+  <div class="field"><button class="btn btn-primary" type="submit">{{ t('labels.addButton') }}</button></div>
+</form>
+{% endblock %}

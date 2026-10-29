@@ -1,0 +1,25 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('notifications.title') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ t('notifications.title') }}</h1><p class="sub">{{ t('notifications.sub') }}</p></div>
+  {% if unread %}
+  <form method="post" action="/notifications/read-all" class="head-actions">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <button class="btn btn-secondary" type="submit">{{ t('notifications.markAll') }}</button>
+  </form>
+  {% endif %}
+</div>
+<div class="box">
+  {% for n in items %}
+  <a class="notice{% if not n.read_at %} is-unread{% endif %}" href="/notifications/{{ n.id }}">
+    <span class="notice-text">{{ t('notify.' + n.kind, { actor: n.actor_name or appName, n: '#' + n.task_id, title: n.title }) }}</span>
+    <span class="notice-title">#{{ n.task_id }} · {{ n.title }}</span>
+    <span class="small muted">{{ fmt.ago(n.created_at) }}{% if not n.read_at %} · <strong>{{ t('notifications.new') }}</strong>{% endif %}</span>
+  </a>
+  {% else %}
+  <div class="empty"><p>{{ t('notifications.empty') }}</p></div>
+  {% endfor %}
+</div>
+<p class="hint">{{ t('notifications.emailHint') }} <a href="/settings">{{ t('nav.settings') }}</a></p>
+{% endblock %}

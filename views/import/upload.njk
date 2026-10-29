@@ -1,0 +1,25 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('import.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('import.title') }}</h1><p class="sub">{{ t('import.sub') }}</p></div></div>
+{% if last %}<div class="info-bar">{{ t('import.last', { d: fmt.date(last.at), p: last.name, n: last.details.count, file: last.details.file }) }}</div>{% endif %}
+<ol class="stepper">
+  <li aria-current="step"><span>1</span>{{ t('import.step.upload') }}</li>
+  <li><span>2</span>{{ t('import.step.match') }}</li>
+  <li><span>3</span>{{ t('import.step.review') }}</li>
+</ol>
+<form class="form card-form" method="post" action="/import" enctype="multipart/form-data">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field">
+    <label for="file">{{ t('import.file') }}</label>
+    <input id="file" type="file" name="file" accept=".xlsx,.csv" required>
+    <p class="hint">{{ t('import.fileHint') }}</p>
+  </div>
+  <ul class="tips">
+    <li>{{ t('import.tip1') }}</li>
+    <li>{{ t('import.tip2') }}</li>
+    <li>{{ t('import.tip3') }}</li>
+  </ul>
+  <div class="form-actions"><button class="btn btn-primary" type="submit">{{ t('import.upload') }}</button></div>
+</form>
+{% endblock %}

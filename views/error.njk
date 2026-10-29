@@ -1,0 +1,7 @@
+{% extends "bare.njk" %}
+{% block title %}{{ status }}{% endblock %}
+{% block content %}
+<h1>{{ message }}</h1>
+<p class="muted">{{ t('errors.code', { status: status }) }}</p>
+<a class="btn btn-primary" href="/">{{ t('errors.home') }}</a>
+{% endblock %}

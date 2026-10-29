@@ -1,0 +1,35 @@
+# Self-hosting: `docker compose up -d` with a filled-in .env next to this file.
+# Put an HTTPS reverse proxy (Caddy, nginx, or the company's) in front of port 3000.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://mahamm:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/mahamm
+      TRUST_PROXY: "1"
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mahamm
+      POSTGRES_USER: mahamm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # No ports published: the database is reachable only from the app container.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mahamm -d mahamm"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db-data:

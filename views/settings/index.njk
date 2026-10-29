@@ -1,0 +1,60 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('settings.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('settings.title') }}</h1><p class="sub" dir="ltr">{{ me.email }}</p></div></div>
+
+<section class="card-form">
+  <h2 class="section-title">{{ t('settings.profile') }}</h2>
+  <form class="form" method="post" action="/settings/profile">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <div class="grid-2">
+      <div class="field"><label for="name">{{ t('settings.name') }}</label><input id="name" class="input" name="name" value="{{ me.name }}" maxlength="100" required></div>
+      <div class="field">
+        <label for="lang">{{ t('settings.language') }}</label>
+        <select id="lang" class="input" name="lang">
+          <option value="en" {% if me.lang == 'en' %}selected{% endif %}>English</option>
+          <option value="ar" {% if me.lang == 'ar' %}selected{% endif %} lang="ar">العربية</option>
+        </select>
+      </div>
+    </div>
+    <label class="check-inline"><input type="checkbox" name="email_notifications" value="on" {% if me.email_notifications %}checked{% endif %}> {{ t('settings.emailMe') }}</label>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">{{ t('common.save') }}</button></div>
+  </form>
+</section>
+
+<section class="card-form" id="password">
+  <h2 class="section-title">{{ t('settings.password') }}</h2>
+  <form class="form" method="post" action="/settings/password">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <div class="field"><label for="current">{{ t('settings.currentPassword') }}</label><input id="current" class="input" type="password" name="current" autocomplete="current-password" required></div>
+    <div class="grid-2">
+      <div class="field"><label for="password">{{ t('settings.newPassword') }}</label><input id="password" class="input" type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required></div>
+      <div class="field"><label for="confirm">{{ t('settings.confirmPassword') }}</label><input id="confirm" class="input" type="password" name="confirm" autocomplete="new-password" minlength="12" maxlength="128" required></div>
+    </div>
+    <p class="hint">{{ t('password.rules') }} {{ t('settings.signsOutOthers') }}</p>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">{{ t('settings.changePassword') }}</button></div>
+  </form>
+</section>
+
+<section class="card-form" id="two-factor">
+  <h2 class="section-title">{{ t('settings.twoFactor') }}</h2>
+  {% if me.totp_enabled %}
+    <p><span class="ok-text strong">{{ t('common.on') }}</span> · {{ t('settings.codesLeft', { n: me.codes_left }) }}</p>
+    {% if user.isAdmin %}
+      <p class="hint">{{ t('settings.adminKeeps') }}</p>
+    {% else %}
+    <form class="form" method="post" action="/settings/two-factor/disable" data-confirm="{{ t('settings.confirmDisable2fa') }}">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <div class="grid-2">
+        <div class="field"><label for="d-pw">{{ t('settings.currentPassword') }}</label><input id="d-pw" class="input" type="password" name="password" autocomplete="current-password" required></div>
+        <div class="field"><label for="d-code">{{ t('auth.code') }}</label><input id="d-code" class="input" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required></div>
+      </div>
+      <div class="form-actions"><button class="btn btn-secondary" type="submit">{{ t('settings.turnOff') }}</button></div>
+    </form>
+    {% endif %}
+  {% else %}
+    <p>{{ t('settings.twoFactorPitch') }}</p>
+    <a class="btn btn-primary" href="/settings/two-factor">{{ t('settings.turnOn') }}</a>
+  {% endif %}
+</section>
+{% endblock %}

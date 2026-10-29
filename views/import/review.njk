@@ -1,0 +1,74 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('import.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('import.title') }}</h1><p class="sub"><span dir="ltr">{{ job.filename }}</span> · {{ t('import.rows', { n: rowCount }) }}</p></div></div>
+<ol class="stepper">
+  <li class="is-done"><span>✓</span>{{ t('import.step.upload') }}</li>
+  <li {% if not preview %}aria-current="step"{% else %}class="is-done"{% endif %}><span>{{ '✓' if preview else '2' }}</span>{{ t('import.step.match') }}</li>
+  <li {% if preview %}aria-current="step"{% endif %}><span>3</span>{{ t('import.step.review') }}</li>
+</ol>
+
+<form class="card-form" method="get" action="/import/{{ job.id }}">
+  <input type="hidden" name="mapped" value="1">
+  <h2 class="section-title">{{ t('import.matchTitle') }}</h2>
+  <p class="hint">{{ t('import.matchHint') }}</p>
+  <div class="map-grid">
+    {% for f in fields %}
+    <label for="map-{{ f }}" class="map-label">{{ t('import.field.' + f) }}{% if f == 'title' %} *{% endif %}</label>
+    <select id="map-{{ f }}" class="input" name="map_{{ f }}">
+      <option value="">{{ t('import.notInSheet') }}</option>
+      {% for h in job.headers %}<option value="{{ loop.index0 }}" {% if mapping[f] === loop.index0 %}selected{% endif %}>{{ h }}{% if samples[loop.index0] %} — {{ samples[loop.index0] | truncate(30, true, '…') }}{% endif %}</option>{% endfor %}
+    </select>
+    {% endfor %}
+  </div>
+  <p class="hint">{{ t('import.statusHint') }}</p>
+  <div class="form-actions"><button class="btn btn-secondary" type="submit">{{ t('import.previewButton') }}</button></div>
+</form>
+
+{% if not preview %}
+<div class="info-bar warn">{{ t('import.needTitle') }}</div>
+{% else %}
+<div class="stats">
+  <div class="stat"><div class="stat-value">{{ preview.counts.total }}</div><div class="stat-label">{{ t('import.count.total') }}</div></div>
+  <div class="stat"><div class="stat-value is-ok">{{ preview.counts.ready }}</div><div class="stat-label">{{ t('import.count.ready') }}</div></div>
+  <div class="stat"><div class="stat-value{% if preview.counts.noTitle %} is-bad{% endif %}">{{ preview.counts.noTitle }}</div><div class="stat-label">{{ t('import.count.noTitle') }}</div></div>
+  <div class="stat"><div class="stat-value{% if preview.counts.dupes %} is-warn{% endif %}">{{ preview.counts.dupes }}</div><div class="stat-label">{{ t('import.count.dupes') }}</div></div>
+</div>
+
+<div class="box table-wrap">
+  <table class="table table-tight">
+    <thead>
+      <tr>
+        <th scope="col">{{ t('import.row') }}</th>
+        {% for f in fields %}{% if mapping[f] is defined %}<th scope="col">{{ t('import.field.' + f) }}</th>{% endif %}{% endfor %}
+        <th scope="col">{{ t('import.result') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in preview.rows %}
+      {% if loop.index0 < 300 %}
+      <tr>
+        <td class="muted">{{ row.rowNumber }}</td>
+        {% for c in row.cells %}
+        <td>{% if c.missing %}<span class="chip c-red">{{ t('import.missing') }}</span>{% elif c.na %}<em class="muted small">{{ t('import.notDone') }}</em>{% else %}<span dir="auto">{{ c.text | truncate(80, true, '…') }}</span>{% endif %}</td>
+        {% endfor %}
+        <td>
+          <span class="res res-{{ row.kind }}">{{ t(row.key, row.vars) }}</span>
+          {% for w in row.warnings %}<span class="small muted block">{{ t(w.key, w.vars) }}</span>{% endfor %}
+        </td>
+      </tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if preview.rows.length > 300 %}<p class="hint pad">{{ t('import.moreRows', { n: preview.rows.length - 300 }) }}</p>{% endif %}
+</div>
+
+<form class="form-actions sticky-actions" method="post" action="/import/{{ job.id }}/run" data-confirm="{{ t('import.confirm', { n: preview.counts.ready }) }}">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  {% for f in fields %}{% if mapping[f] is defined %}<input type="hidden" name="map_{{ f }}" value="{{ mapping[f] }}">{% endif %}{% endfor %}
+  <p class="hint">{{ t('import.runHint') }}</p>
+  <button class="btn btn-primary" type="submit" {% if not preview.counts.ready %}disabled{% endif %}>{{ t('import.run', { n: preview.counts.ready }) }}</button>
+</form>
+{% endif %}
+{% endblock %}

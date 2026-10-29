@@ -1,0 +1,45 @@
+{
+  "name": "mahamm",
+  "version": "1.0.0",
+  "description": "Invite-only task board with a full audit trail",
+  "private": true,
+  "type": "module",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/copy-fonts.js",
+    "migrate": "node scripts/migrate.js",
+    "start": "node src/server.js",
+    "start:render": "node scripts/migrate.js && node src/server.js",
+    "dev": "node --env-file=.env --watch src/server.js",
+    "test": "node --test --test-concurrency=1 test/",
+    "audit:deps": "npm audit --omit=dev --audit-level=high"
+  },
+  "dependencies": {
+    "@fontsource/ibm-plex-sans": "^5.2.5",
+    "@fontsource/ibm-plex-sans-arabic": "^5.2.5",
+    "argon2": "^0.43.0",
+    "connect-pg-simple": "^10.0.0",
+    "csrf-sync": "^4.2.1",
+    "csv-parse": "^5.6.0",
+    "exceljs": "^4.4.0",
+    "express": "^5.1.0",
+    "express-session": "^1.18.1",
+    "file-type": "^21.0.0",
+    "helmet": "^8.1.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.5",
+    "nunjucks": "^3.2.4",
+    "otpauth": "^9.4.0",
+    "pg": "^8.16.0",
+    "pino": "^9.7.0",
+    "pino-http": "^10.5.0",
+    "qrcode": "^1.5.4",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.1"
+  }
+}

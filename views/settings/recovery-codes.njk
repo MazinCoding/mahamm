@@ -1,0 +1,12 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('twoFactor.codesTitle') }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('twoFactor.codesTitle') }}</h1><p class="sub">{{ t('twoFactor.codesSub') }}</p></div></div>
+<div class="card-form">
+  <ul class="codes" dir="ltr">
+    {% for c in codes %}<li><code>{{ c }}</code></li>{% endfor %}
+  </ul>
+  <p class="note">{{ t('twoFactor.codesOnce') }}</p>
+  <a class="btn btn-primary" href="/board">{{ t('twoFactor.codesDone') }}</a>
+</div>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('task.new') if mode == 'new' else t('task.editTitle', { n: '#' + task.id }) }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ '/board' if mode == 'new' else '/tasks/' + task.id }}"><svg class="flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>{{ t('common.back') }}</a>
+<div class="page-head"><h1>{{ t('task.new') if mode == 'new' else t('task.editTitle', { n: '#' + task.id }) }}</h1></div>
+{% if mode == 'edit' %}<p class="sub">{{ t('task.editNote') }}</p>{% endif %}
+
+<form class="form card-form" method="post" action="{{ '/tasks' if mode == 'new' else '/tasks/' + task.id + '/edit' }}" {% if mode == 'new' %}enctype="multipart/form-data"{% endif %}>
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field">
+    <label for="title">{{ t('field.title') }}</label>
+    <input id="title" class="input" type="text" name="title" value="{{ values.title }}" maxlength="200" required {% if errors.title %}aria-invalid="true" aria-describedby="err-title"{% endif %}>
+    {{ m.field_error(errors, 'title') }}
+  </div>
+  <div class="field">
+    <label for="description">{{ t('field.description') }} <span class="muted">({{ t('common.optional') }})</span></label>
+    <textarea id="description" class="input" name="description" rows="6" maxlength="10000">{{ values.description }}</textarea>
+    {{ m.field_error(errors, 'description') }}
+  </div>
+  <div class="grid-3">
+    {% if mode == 'new' %}
+    <div class="field">
+      <label for="status">{{ t('field.column') }}</label>
+      <select id="status" class="input" name="status">
+        <option value="todo" {% if values.status == 'todo' %}selected{% endif %}>{{ t('status.todo') }}</option>
+        <option value="backlog" {% if values.status == 'backlog' %}selected{% endif %}>{{ t('status.backlog') }}</option>
+      </select>
+    </div>
+    {% endif %}
+    <div class="field">
+      <label for="priority">{{ t('field.priority') }}</label>
+      <select id="priority" class="input" name="priority">
+        {% for p in ['high', 'med', 'low'] %}<option value="{{ p }}" {% if values.priority == p %}selected{% endif %}>{{ t('priority.' + p) }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="due_date">{{ t('field.due') }} <span class="muted">({{ t('common.optional') }})</span></label>
+      <input id="due_date" class="input" type="date" name="due_date" value="{{ values.due_date }}" {% if errors.due_date %}aria-invalid="true" aria-describedby="err-due_date"{% endif %}>
+      {{ m.field_error(errors, 'due_date') }}
+    </div>
+  </div>
+  <fieldset class="field">
+    <legend>{{ t('field.assignees') }} <span class="muted">({{ t('common.optional') }})</span></legend>
+    <div class="checks">
+      {% for p in people %}
+      <label class="check"><input type="checkbox" name="assignees" value="{{ p.id }}" {% if p.id in values.assignees %}checked{% endif %}>{{ m.avatar(p) }}<span>{{ p.name }}</span></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <fieldset class="field">
+    <legend>{{ t('field.labels') }} <span class="muted">({{ t('common.optional') }})</span></legend>
+    <div class="checks checks-chips">
+      {% for l in labels %}
+      <label class="check"><input type="checkbox" name="labels" value="{{ l.id }}" {% if (l.id | string) in values.labels %}checked{% endif %}>{{ m.label(l) }}</label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  {% if mode == 'new' %}
+  <div class="field">
+    <label for="file">{{ t('field.attachment') }} <span class="muted">({{ t('common.optional') }})</span></label>
+    <input id="file" type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx">
+    <p class="hint">{{ t('file.hint') }}</p>
+    {{ m.field_error(errors, 'file') }}
+  </div>
+  {% endif %}
+  <div class="form-actions">
+    <a class="btn btn-secondary" href="{{ '/board' if mode == 'new' else '/tasks/' + task.id }}">{{ t('common.cancel') }}</a>
+    <button class="btn btn-primary" type="submit">{{ t('task.create') if mode == 'new' else t('task.save') }}</button>
+  </div>
+</form>
+{% endblock %}

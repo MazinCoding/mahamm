@@ -1,0 +1,45 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('close.title', { n: '#' + task.id }) }}{% endblock %}
+{% block content %}
+<a class="back" href="/tasks/{{ task.id }}"><svg class="flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>{{ t('common.back') }}</a>
+<div class="page-head"><div><h1>{{ t('close.title', { n: '#' + task.id }) }}</h1><p class="sub">{{ task.title }}</p></div></div>
+
+<form class="form card-form" method="post" action="/tasks/{{ task.id }}/close" data-close-form>
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <fieldset class="field">
+    <legend>{{ t('close.why') }}</legend>
+    <div class="radios">
+      {% for r in ['completed', 'notneeded', 'duplicate', 'mistake'] %}
+      <label class="radio-card">
+        <input type="radio" name="reason" value="{{ r }}" {% if values.reason == r %}checked{% endif %}>
+        <span><span class="strong">{{ t('reason.' + r) }}</span><span class="small muted block">{{ t('reasonHint.' + r) }}</span></span>
+      </label>
+      {% endfor %}
+    </div>
+  </fieldset>
+
+  <fieldset class="field" data-show-for="completed">
+    <legend>{{ t('close.whoDid') }}</legend>
+    <p class="hint">{{ t('close.whoHint') }}</p>
+    <div class="checks">
+      {% for p in people %}
+      <label class="check"><input type="checkbox" name="credited" value="{{ p.id }}" {% if p.id in values.credited %}checked{% endif %}>{{ m.avatar(p) }}<span>{{ p.name }}{% if p.id == user.id %} ({{ t('common.you') }}){% endif %}</span></label>
+      {% endfor %}
+    </div>
+    {{ m.field_error(errors, 'credited') }}
+  </fieldset>
+
+  <div class="field" data-show-for="duplicate">
+    <label for="duplicate_of">{{ t('close.duplicateOf') }} <span class="muted">({{ t('common.optional') }})</span></label>
+    <input id="duplicate_of" class="input input-narrow" type="text" inputmode="numeric" name="duplicate_of" value="{{ values.duplicate_of }}" placeholder="#123">
+    {{ m.field_error(errors, 'duplicate_of') }}
+  </div>
+
+  <p class="note">{{ t('close.recordNote', { me: user.name }) }}</p>
+  <div class="form-actions">
+    <a class="btn btn-secondary" href="/tasks/{{ task.id }}">{{ t('common.cancel') }}</a>
+    <button class="btn btn-primary" type="submit">{{ t('task.close') }}</button>
+  </div>
+</form>
+{% endblock %}

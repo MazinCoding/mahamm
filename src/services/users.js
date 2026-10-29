@@ -1,0 +1,172 @@
+import { audit } from '../audit.js';
+import { hashToken, newToken } from '../crypto.js';
+import { one, q, tx } from '../db.js';
+import { hashPassword } from '../passwords.js';
+import { signOutEverywhere } from '../auth.js';
+import { HttpError } from './tasks.js';
+
+const INVITE_HOURS = 72;
+
+export async function userCount() {
+  return (await one('SELECT count(*)::int AS n FROM users')).n;
+}
+
+export async function activePeople() {
+  const { rows } = await q(`SELECT id, name, email FROM users WHERE status = 'active' ORDER BY name`);
+  return rows;
+}
+
+export async function allPeopleNames() {
+  const { rows } = await q('SELECT id, name, status FROM users ORDER BY name');
+  return rows;
+}
+
+export async function createInvite(email, role, actor, ip) {
+  return tx(async (db) => {
+    const existing = await db.query('SELECT 1 FROM users WHERE email = $1', [email]);
+    if (existing.rows[0]) throw new HttpError(409, 'already a member');
+    await db.query('UPDATE invites SET revoked_at = now() WHERE email = $1 AND accepted_at IS NULL AND revoked_at IS NULL', [email]);
+    const token = newToken();
+    const { rows } = await db.query(
+      `INSERT INTO invites (email, role, token_hash, invited_by, expires_at)
+       VALUES ($1, $2, $3, $4, now() + make_interval(hours => $5)) RETURNING id, email, role, expires_at`,
+      [email, role, hashToken(token), actor.id, INVITE_HOURS],
+    );
+    await audit(db, { actorId: actor.id, action: 'user.invited', details: { invite_id: rows[0].id, email, role }, ip });
+    return { token, invite: rows[0] };
+  });
+}
+
+export async function findInvite(token) {
+  return one(
+    `SELECT i.id, i.email, i.role, i.expires_at, u.name AS invited_by_name
+     FROM invites i JOIN users u ON u.id = i.invited_by
+     WHERE i.token_hash = $1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > now()`,
+    [hashToken(token)],
+  );
+}
+
+export async function acceptInvite(token, { name, password }, ip) {
+  const passwordHash = await hashPassword(password);
+  return tx(async (db) => {
+    const { rows } = await db.query(
+      `SELECT id, email, role FROM invites
+       WHERE token_hash = $1 AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now() FOR UPDATE`,
+      [hashToken(token)],
+    );
+    const invite = rows[0];
+    if (!invite) throw new HttpError(410, 'invite not valid');
+    const exists = await db.query('SELECT 1 FROM users WHERE email = $1', [invite.email]);
+    if (exists.rows[0]) throw new HttpError(409, 'already a member');
+    const user = (await db.query(
+      `INSERT INTO users (email, name, password_hash, role) VALUES ($1, $2, $3, $4)
+       RETURNING id, email, name, role, status, lang, totp_enabled, password_changed_at`,
+      [invite.email, name, passwordHash, invite.role],
+    )).rows[0];
+    await db.query('UPDATE invites SET accepted_at = now() WHERE id = $1', [invite.id]);
+    await audit(db, { actorId: user.id, action: 'invite.accepted', subjectUserId: user.id, details: { invite_id: invite.id }, ip });
+    return user;
+  });
+}
+
+export async function revokeInvite(inviteId, actor, ip) {
+  return tx(async (db) => {
+    const { rows } = await db.query(
+      'UPDATE invites SET revoked_at = now() WHERE id = $1 AND accepted_at IS NULL AND revoked_at IS NULL RETURNING email',
+      [inviteId],
+    );
+    if (!rows[0]) throw new HttpError(404, 'invite not found');
+    await audit(db, { actorId: actor.id, action: 'invite.revoked', details: { invite_id: inviteId, email: rows[0].email }, ip });
+  });
+}
+
+export async function createReset(userId, createdBy, hours, ip) {
+  return tx(async (db) => {
+    await db.query('UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL', [userId]);
+    const token = newToken();
+    await db.query(
+      `INSERT INTO password_resets (user_id, token_hash, created_by, expires_at)
+       VALUES ($1, $2, $3, now() + make_interval(hours => $4))`,
+      [userId, hashToken(token), createdBy, hours],
+    );
+    if (createdBy) await audit(db, { actorId: createdBy, action: 'user.reset_link_created', subjectUserId: userId, ip });
+    return token;
+  });
+}
+
+export async function findReset(token) {
+  return one(
+    `SELECT r.id, r.user_id, u.email, u.name FROM password_resets r JOIN users u ON u.id = r.user_id
+     WHERE r.token_hash = $1 AND r.used_at IS NULL AND r.expires_at > now() AND u.status = 'active'`,
+    [hashToken(token)],
+  );
+}
+
+export async function completeReset(token, password, ip) {
+  const passwordHash = await hashPassword(password);
+  const userId = await tx(async (db) => {
+    const { rows } = await db.query(
+      `SELECT r.id, r.user_id FROM password_resets r JOIN users u ON u.id = r.user_id
+       WHERE r.token_hash = $1 AND r.used_at IS NULL AND r.expires_at > now() AND u.status = 'active' FOR UPDATE OF r`,
+      [hashToken(token)],
+    );
+    const reset = rows[0];
+    if (!reset) throw new HttpError(410, 'reset not valid');
+    await db.query('UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL', [reset.user_id]);
+    await db.query('UPDATE users SET password_hash = $2, password_changed_at = now() WHERE id = $1', [reset.user_id, passwordHash]);
+    await audit(db, { actorId: reset.user_id, action: 'auth.password_reset', subjectUserId: reset.user_id, ip });
+    return reset.user_id;
+  });
+  await signOutEverywhere(userId);
+  return userId;
+}
+
+// There must always be at least one active admin.
+async function assertAnotherAdmin(db, userId) {
+  const { rows } = await db.query(
+    `SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND status = 'active' AND id <> $1`, [userId],
+  );
+  if (rows[0].n === 0) throw new HttpError(409, 'last admin');
+}
+
+export async function changeRole(userId, role, actor, ip) {
+  return tx(async (db) => {
+    const { rows } = await db.query('SELECT id, role FROM users WHERE id = $1 FOR UPDATE', [userId]);
+    const target = rows[0];
+    if (!target) throw new HttpError(404, 'user not found');
+    if (target.role === role) return;
+    if (target.id === actor.id) throw new HttpError(409, 'cannot change own role');
+    if (target.role === 'admin') await assertAnotherAdmin(db, userId);
+    // A new admin is sent to two-step setup on their next request (see enforceAdminTwoFactor).
+    await db.query('UPDATE users SET role = $2 WHERE id = $1', [userId, role]);
+    await audit(db, { actorId: actor.id, action: 'user.role_changed', subjectUserId: userId, details: { from: target.role, to: role }, ip });
+  });
+}
+
+export async function setStatus(userId, status, actor, ip) {
+  await tx(async (db) => {
+    const { rows } = await db.query('SELECT id, role, status FROM users WHERE id = $1 FOR UPDATE', [userId]);
+    const target = rows[0];
+    if (!target) throw new HttpError(404, 'user not found');
+    if (target.status === status) return;
+    if (target.id === actor.id) throw new HttpError(409, 'cannot disable yourself');
+    if (status === 'disabled' && target.role === 'admin') await assertAnotherAdmin(db, userId);
+    await db.query('UPDATE users SET status = $2 WHERE id = $1', [userId, status]);
+    await audit(db, { actorId: actor.id, action: status === 'disabled' ? 'user.disabled' : 'user.enabled', subjectUserId: userId, ip });
+  });
+  if (status === 'disabled') await signOutEverywhere(userId);
+}
+
+export async function peopleOverview() {
+  const users = (await q(
+    `SELECT u.id, u.name, u.email, u.role, u.status, u.totp_enabled, u.last_seen_at, u.created_at,
+       (SELECT count(*)::int FROM task_credits tc WHERE tc.user_id = u.id) AS completed
+     FROM users u ORDER BY u.status, u.name`,
+  )).rows;
+  const invites = (await q(
+    `SELECT i.id, i.email, i.role, i.expires_at, i.created_at, u.name AS invited_by_name
+     FROM invites i JOIN users u ON u.id = i.invited_by
+     WHERE i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > now() ORDER BY i.created_at DESC`,
+  )).rows;
+  return { users, invites };
+}

@@ -1,0 +1,22 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('twoFactor.title') }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ t('twoFactor.title') }}</h1><p class="sub">{{ t('twoFactor.requiredAdmin') if required else t('twoFactor.sub') }}</p></div></div>
+<div class="card-form two-factor">
+  <ol class="steps-list">
+    <li>{{ t('twoFactor.step1') }}</li>
+    <li>{{ t('twoFactor.step2') }}</li>
+  </ol>
+  <img class="qr" src="{{ qr }}" width="220" height="220" alt="{{ t('twoFactor.qrAlt') }}">
+  <p class="small">{{ t('twoFactor.manual') }} <code dir="ltr">{{ secret }}</code></p>
+  <form class="form" method="post" action="/settings/two-factor">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <div class="field">
+      <label for="code">{{ t('twoFactor.step3') }}</label>
+      <input id="code" class="input input-code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" maxlength="7" required {% if error %}aria-invalid="true" aria-describedby="code-err"{% endif %}>
+      {% if error %}<p class="error" id="code-err">{{ error }}</p>{% endif %}
+    </div>
+    <div class="form-actions"><button class="btn btn-primary" type="submit">{{ t('twoFactor.confirm') }}</button></div>
+  </form>
+</div>
+{% endblock %}

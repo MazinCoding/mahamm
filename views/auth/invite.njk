@@ -1,0 +1,29 @@
+{% extends "bare.njk" %}
+{% block title %}{{ t('auth.inviteTitle') }}{% endblock %}
+{% block content %}
+<h1>{{ t('auth.inviteTitle') }}</h1>
+<p class="sub">{{ t('auth.inviteSub', { who: invite.invited_by_name, role: t('role.' + invite.role) }) }}</p>
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+<form class="form" method="post" action="/invite/{{ token }}">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field">
+    <label for="email">{{ t('auth.email') }}</label>
+    <input id="email" class="input" type="email" value="{{ invite.email }}" autocomplete="username" readonly dir="ltr">
+  </div>
+  <div class="field">
+    <label for="name">{{ t('settings.name') }}</label>
+    <input id="name" class="input" type="text" name="name" value="{{ name }}" autocomplete="name" maxlength="100" required>
+  </div>
+  <div class="field">
+    <label for="password">{{ t('settings.newPassword') }}</label>
+    <input id="password" class="input" type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+  </div>
+  <div class="field">
+    <label for="confirm">{{ t('settings.confirmPassword') }}</label>
+    <input id="confirm" class="input" type="password" name="confirm" autocomplete="new-password" minlength="12" maxlength="128" required>
+  </div>
+  <p class="hint">{{ t('password.rules') }}</p>
+  <button class="btn btn-primary btn-block" type="submit">{{ t('auth.createAccount') }}</button>
+</form>
+<p class="auth-foot">{{ t('auth.inviteExpiry', { d: fmt.dateTime(invite.expires_at) }) }}</p>
+{% endblock %}

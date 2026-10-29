@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ dir }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>{% block title %}{{ appName }}{% endblock %} · {{ appName }}</title>
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/css/app.css">
+<script src="/static/js/app.js" defer></script>
+</head>
+<body class="bare">
+<div class="auth-wrap">
+  <div class="auth-top">
+    <span class="brand">
+      <span class="brand-mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+      <span class="brand-name">{{ appName }}</span>
+    </span>
+    {% if csrfToken %}
+    <form method="post" action="/lang" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <input type="hidden" name="lang" value="{{ 'en' if lang == 'ar' else 'ar' }}">
+      <input type="hidden" name="next" value="{{ currentUrl }}">
+      <button class="btn btn-link" type="submit" lang="{{ 'en' if lang == 'ar' else 'ar' }}">{{ 'English' if lang == 'ar' else 'العربية' }}</button>
+    </form>
+    {% endif %}
+  </div>
+  <main class="auth-card" id="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

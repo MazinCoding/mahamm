@@ -1,0 +1,14 @@
+{% extends "layout.njk" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>{{ title }}</h1><p class="sub">{{ body }}</p></div></div>
+<div class="card-form">
+  <label class="strong" for="once-link">{{ t('people.link') }}</label>
+  <div class="copy-row">
+    <input id="once-link" class="input" type="text" value="{{ link }}" readonly dir="ltr">
+    <button class="btn btn-secondary" type="button" data-copy="#once-link" data-copied="{{ t('common.copied') }}">{{ t('common.copy') }}</button>
+  </div>
+  <p class="note">{{ t('people.linkOnce') }}</p>
+  <a class="btn btn-primary" href="/people">{{ t('people.backToPeople') }}</a>
+</div>
+{% endblock %}

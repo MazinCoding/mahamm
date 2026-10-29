@@ -1,0 +1,19 @@
+{% extends "bare.njk" %}
+{% block title %}{{ t('auth.resetTitle') }}{% endblock %}
+{% block content %}
+<h1>{{ t('auth.resetTitle') }}</h1>
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+<form class="form" method="post" action="/reset/{{ token }}">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field">
+    <label for="password">{{ t('settings.newPassword') }}</label>
+    <input id="password" class="input" type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required>
+  </div>
+  <div class="field">
+    <label for="confirm">{{ t('settings.confirmPassword') }}</label>
+    <input id="confirm" class="input" type="password" name="confirm" autocomplete="new-password" minlength="12" maxlength="128" required>
+  </div>
+  <p class="hint">{{ t('password.rules') }}</p>
+  <button class="btn btn-primary btn-block" type="submit">{{ t('auth.setPassword') }}</button>
+</form>
+{% endblock %}

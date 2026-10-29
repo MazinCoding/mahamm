@@ -1,0 +1,179 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}#{{ task.id }} {{ task.title }}{% endblock %}
+{% block content %}
+<a class="back" href="/board"><svg class="flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>{{ t('task.backToBoard') }}</a>
+
+<div class="task-head">
+  <h1>{{ task.title }} <span class="num-lg">#{{ task.id }}</span></h1>
+  <div class="task-head-meta">
+    {% if not task.closed_at %}
+      <span class="pill pill-open">{{ t('state.open') }}</span>
+    {% elif task.close_reason == 'completed' %}
+      <span class="pill pill-done">{{ t('state.closedReason', { reason: t('reason.completed') }) }}</span>
+    {% else %}
+      <span class="pill pill-skip">{{ t('state.closedReason', { reason: t('reason.' + task.close_reason) }) }}</span>
+    {% endif %}
+    <span class="muted">{{ t('task.openedBy', { p: task.creator_name, t: fmt.ago(task.created_at) }) }}</span>
+    <span class="grow"></span>
+    {% if canEdit %}<a class="btn btn-secondary btn-sm" href="/tasks/{{ task.id }}/edit">{{ t('task.edit') }}</a>{% endif %}
+    <a class="btn btn-secondary btn-sm" href="/tasks/{{ task.id }}/flag">{{ t('flag.action') }}</a>
+  </div>
+</div>
+
+{% for f in openFlags %}
+<div class="flag-banner" role="note">
+  <div class="flag-banner-text">
+    <strong>{{ t('flag.bannerTitle', { p: f.flagged_by_name, reason: t('flagReason.' + f.reason) }) }}</strong>
+    {% if f.note %}<p class="pre">{{ f.note }}</p>{% endif %}
+    <span class="muted small">{{ fmt.ago(f.created_at) }}</span>
+  </div>
+  {% if canResolve %}
+  <div class="flag-banner-actions">
+    <form method="post" action="/tasks/{{ task.id }}/flags/{{ f.id }}/resolve" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}"><input type="hidden" name="resolution" value="fixed">
+      <button class="btn btn-secondary btn-sm" type="submit">{{ t('flag.markFixed') }}</button>
+    </form>
+    <form method="post" action="/tasks/{{ task.id }}/flags/{{ f.id }}/resolve" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}"><input type="hidden" name="resolution" value="dismissed">
+      <button class="btn btn-link btn-sm" type="submit">{{ t('flag.dismiss') }}</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="small muted">{{ t('flag.whoResolves') }}</p>
+  {% endif %}
+</div>
+{% endfor %}
+
+<div class="split">
+  <div class="split-main">
+    <div class="post">
+      {{ m.avatar({ id: task.creator_id, name: task.creator_name }, 'av-lg') }}
+      <div class="post-box">
+        <div class="post-head"><strong>{{ task.creator_name }}</strong> <span class="muted">{{ fmt.ago(task.created_at) }}</span>{% if task.imported %} <span class="chip c-gray">{{ t('task.imported') }}</span>{% endif %}</div>
+        <div class="post-body pre">{% if task.description %}{{ task.description }}{% else %}<em class="muted">{{ t('task.noDescription') }}</em>{% endif %}</div>
+      </div>
+    </div>
+
+    <ol class="timeline">
+      {% for item in timeline %}
+      {% if item.kind == 'comment' %}
+      <li class="post">
+        {{ m.avatar({ id: item.actorId, name: item.actorName }, 'av-lg') }}
+        <div class="post-box">
+          <div class="post-head"><strong>{{ item.actorName }}</strong> <time class="muted" datetime="{{ fmt.iso(item.at) }}" title="{{ fmt.dateTime(item.at) }}">{{ fmt.ago(item.at) }}</time></div>
+          <div class="post-body pre">{{ item.body }}</div>
+        </div>
+      </li>
+      {% else %}
+      <li class="event{% if item.action == 'task.closed' %}{% if item.reason == 'completed' %} ev-done{% else %} ev-skip{% endif %}{% elif item.action == 'task.reopened' %} ev-open{% elif item.action == 'task.flagged' %} ev-flag{% endif %}">
+        <span class="event-dot" aria-hidden="true"></span>
+        <span><strong>{{ item.actorName }}</strong>{{ t('common.actorSep') }}{{ item.text }} ·<time datetime="{{ fmt.iso(item.at) }}" title="{{ fmt.dateTime(item.at) }}">{{ fmt.ago(item.at) }}</time></span>
+      </li>
+      {% endif %}
+      {% endfor %}
+    </ol>
+
+    <form id="comment" class="post composer" method="post" action="/tasks/{{ task.id }}/comments">
+      {{ m.avatar(user, 'av-lg') }}
+      <div class="post-box">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+        <label class="sr-only" for="body">{{ t('comment.label') }}</label>
+        <textarea id="body" name="body" rows="4" maxlength="5000" required placeholder="{{ t('comment.placeholder') }}"></textarea>
+        <p class="hint">{{ t('comment.mentionHint') }}</p>
+        <div class="composer-actions">
+          {% if task.closed_at %}
+          <button class="btn btn-secondary" type="submit" form="reopen-form">{{ t('task.reopen') }}</button>
+          {% else %}
+          <a class="btn btn-secondary" href="/tasks/{{ task.id }}/close"><svg class="ic-done" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>{{ t('task.close') }}</a>
+          {% endif %}
+          <button class="btn btn-primary" type="submit">{{ t('comment.submit') }}</button>
+        </div>
+      </div>
+    </form>
+    <form id="reopen-form" method="post" action="/tasks/{{ task.id }}/reopen" hidden>
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    </form>
+  </div>
+
+  <aside class="split-side" aria-label="{{ t('task.details') }}">
+    <section class="side">
+      <h2>{{ t('field.status') }}</h2>
+      {% if task.closed_at %}
+        <p class="strong">{{ t('state.closedReason', { reason: t('reason.' + task.close_reason) }) }}</p>
+        {% if task.duplicate_of %}<p class="small">{{ t('task.duplicateOf') }} <a href="/tasks/{{ task.duplicate_of }}">#{{ task.duplicate_of }}</a></p>{% endif %}
+      {% else %}
+      <form method="post" action="/tasks/{{ task.id }}/move" class="status-form">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+        <label class="sr-only" for="status">{{ t('field.status') }}</label>
+        <select id="status" name="status" class="input">
+          {% for s in ['backlog', 'todo', 'progress', 'review', 'done'] %}
+          <option value="{{ s }}" {% if s == task.status %}selected{% endif %}>{{ t('status.' + s) }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-secondary btn-sm" type="submit">{{ t('task.move') }}</button>
+      </form>
+      {% endif %}
+    </section>
+    <section class="side">
+      <h2>{{ t('field.assignees') }}</h2>
+      {% for a in task.assignees %}<div class="person">{{ m.avatar(a) }}<span>{{ a.name }}</span></div>{% else %}<p class="muted"><em>{{ t('task.noOne') }}</em></p>{% endfor %}
+    </section>
+    <section class="side">
+      <h2>{{ t('field.labels') }}</h2>
+      {% if task.labels.length %}<div class="chips">{% for l in task.labels %}{{ m.label(l) }}{% endfor %}</div>{% else %}<p class="muted"><em>{{ t('task.noLabels') }}</em></p>{% endif %}
+    </section>
+    <section class="side side-row">
+      <div><h2>{{ t('field.priority') }}</h2>{{ m.prio(task.priority) }}</div>
+      <div>
+        <h2>{{ t('field.due') }}</h2>
+        {% if task.due_date %}
+          <span class="{% if task.due_date < today and not task.closed_at %}is-overdue strong{% endif %}">{{ fmt.date(task.due_date) }}</span>
+        {% else %}<em class="muted">{{ t('task.noDue') }}</em>{% endif %}
+      </div>
+    </section>
+    <section class="side">
+      <h2>{{ t('field.files') }}</h2>
+      {% for f in files %}
+      <div class="file">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5"/></svg>
+        <span class="file-main">
+          <a href="/attachments/{{ f.id }}" download>{{ f.filename }}</a>
+          <span class="small muted">{{ t('file.meta', { size: fileSize(f.size_bytes), p: f.uploader_name }) }}</span>
+        </span>
+        {% if user.isAdmin or user.id == f.uploader_id %}
+        <form method="post" action="/tasks/{{ task.id }}/attachments/{{ f.id }}/remove" class="inline" data-confirm="{{ t('file.confirmRemove') }}">
+          <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+          <button class="btn btn-link btn-sm" type="submit" aria-label="{{ t('file.remove', { f: f.filename }) }}">{{ t('file.removeShort') }}</button>
+        </form>
+        {% endif %}
+      </div>
+      {% else %}<p class="muted"><em>{{ t('file.none') }}</em></p>{% endfor %}
+      <form method="post" action="/tasks/{{ task.id }}/attachments" enctype="multipart/form-data" class="upload">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+        <label class="sr-only" for="file">{{ t('file.choose') }}</label>
+        <input id="file" type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.docx,.xlsx" required>
+        <button class="btn btn-secondary btn-sm" type="submit">{{ t('file.upload') }}</button>
+        <p class="hint">{{ t('file.hint') }}</p>
+      </form>
+    </section>
+    <section class="side record">
+      <h2>{{ t('record.title') }}</h2>
+      <dl>
+        <dt>{{ t('record.createdBy') }}</dt>
+        <dd><strong>{{ task.creator_name }}</strong><br><span class="small muted">{{ fmt.dateTime(task.created_at) }}</span></dd>
+        <dt>{{ t('record.closedBy') }}</dt>
+        <dd>{% if task.closed_at %}<strong>{{ task.closed_by_name }}</strong><br><span class="small muted">{{ fmt.dateTime(task.closed_at) }}</span>{% else %}<em class="muted">{{ t('record.notClosed') }}</em>{% endif %}</dd>
+        <dt>{{ t('record.completedBy') }}</dt>
+        <dd>
+          {% if task.close_reason == 'completed' and task.credits.length %}<strong class="is-done-text">{{ task.credits | join(t('common.listSep'), 'name') }}</strong>
+          {% elif task.close_reason == 'completed' %}<em class="muted">{{ t('record.notRecorded') }}</em>
+          {% elif task.closed_at %}<em class="muted">{{ t('record.nobody', { reason: t('reason.' + task.close_reason) }) }}</em>
+          {% else %}<em class="muted">{{ t('record.notCompleted') }}</em>{% endif %}
+        </dd>
+      </dl>
+      <a class="link-sm" href="/audit?task={{ task.id }}">{{ t('record.fullHistory') }}</a>
+    </section>
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('audit.title') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ t('audit.title') }}</h1><p class="sub">{{ t('audit.sub') }}</p></div>
+  {% if user.isAdmin %}<div class="head-actions"><a class="btn btn-secondary" href="{{ exportUrl }}">{{ t('audit.export') }}</a></div>{% endif %}
+</div>
+
+<form class="toolbar toolbar-plain" method="get" action="/audit">
+  <label for="a-who">{{ t('audit.who') }}</label>
+  <select id="a-who" class="input" name="who" data-autosubmit>
+    <option value="">{{ t('audit.everyone') }}</option>
+    {% for p in people %}<option value="{{ p.id }}" {% if who == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    <option value="system" {% if who == 'system' %}selected{% endif %}>{{ t('common.system') }}</option>
+  </select>
+  <label for="a-group">{{ t('audit.action') }}</label>
+  <select id="a-group" class="input" name="group" data-autosubmit>
+    <option value="">{{ t('audit.allActions') }}</option>
+    {% for g in groups %}<option value="{{ g }}" {% if group == g %}selected{% endif %}>{{ t('audit.group.' + g) }}</option>{% endfor %}
+  </select>
+  <label for="a-task">{{ t('audit.task') }}</label>
+  <input id="a-task" class="input input-narrow" type="text" inputmode="numeric" name="task" value="{{ task or '' }}" placeholder="#">
+  <button class="btn btn-secondary btn-sm" type="submit">{{ t('list.apply') }}</button>
+  <span class="muted small">{{ t('audit.count', { n: total }) }}</span>
+</form>
+
+<div class="box table-wrap">
+  <table class="table">
+    <thead>
+      <tr><th scope="col">{{ t('audit.when') }}</th><th scope="col">{{ t('audit.who') }}</th><th scope="col">{{ t('audit.action') }}</th><th scope="col">{{ t('audit.task') }}</th><th scope="col">{{ t('audit.details') }}</th></tr>
+    </thead>
+    <tbody>
+      {% for e in events %}
+      <tr>
+        <td class="nowrap"><time datetime="{{ fmt.iso(e.at) }}">{{ fmt.dateTime(e.at) }}</time><br><span class="small muted">{{ fmt.ago(e.at) }}</span></td>
+        <td class="nowrap">{% if e.actor_id %}<span class="person">{{ m.avatar({ id: e.actor_id, name: e.actor_name }) }}<span>{{ e.actor_name }}</span></span>{% else %}<span class="muted">{{ t('common.system') }}</span>{% endif %}</td>
+        <td><span class="chip g-{{ e.group }}{% if e.action == 'auth.signin_paused' %} c-red{% endif %}">{{ t('act.' + e.action) }}</span></td>
+        <td>{% if e.task_id %}<a class="strong" href="/tasks/{{ e.task_id }}">#{{ e.task_id }}</a> <span class="muted">{{ e.task_title }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{{ e.text }}{% if user.isAdmin and e.ip and e.group == 'account' %}<br><span class="small muted">{{ t('audit.ip', { ip: e.ip }) }}</span>{% endif %}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">{{ t('audit.empty') }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if prevUrl or nextUrl %}
+<nav class="pager" aria-label="{{ t('list.pages') }}">
+  {% if prevUrl %}<a class="btn btn-secondary btn-sm" href="{{ prevUrl }}">{{ t('list.prev') }}</a>{% endif %}
+  {% if nextUrl %}<a class="btn btn-secondary btn-sm" href="{{ nextUrl }}">{{ t('list.next') }}</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

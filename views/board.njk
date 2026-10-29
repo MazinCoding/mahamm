@@ -1,0 +1,47 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('board.title') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('board.title') }}</h1>
+    <p class="sub">{{ t('board.sub') }}</p>
+  </div>
+  <div class="head-actions">
+    {% if mine %}
+    <a class="btn btn-secondary" href="/board">{{ t('board.showAll') }}</a>
+    {% else %}
+    <a class="btn btn-secondary" href="/board?mine=1">{{ t('board.showMine') }}</a>
+    {% endif %}
+    <a class="btn btn-primary" href="/tasks/new">{{ t('task.new') }}</a>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-value">{{ stats.open }}</div><div class="stat-label">{{ t('board.statOpen') }}</div></div>
+  <div class="stat"><div class="stat-value{% if stats.progress > wipLimit %} is-warn{% endif %}">{{ stats.progress }} / {{ wipLimit }}</div><div class="stat-label">{{ t('board.statProgress') }}</div></div>
+  <div class="stat"><div class="stat-value{% if stats.overdue %} is-bad{% endif %}">{{ stats.overdue }}</div><div class="stat-label">{{ t('board.statOverdue') }}</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.closed7 }}</div><div class="stat-label">{{ t('board.statClosed7') }}</div></div>
+  <div class="stat"><div class="stat-value">{{ stats.cycle_days if stats.cycle_days else t('common.notEnoughData') }}</div><div class="stat-label">{{ t('board.statCycle') }}</div></div>
+</div>
+
+<div class="board" data-board>
+  {% for col in columns %}
+  <section class="col" data-status="{{ col.key }}" aria-labelledby="col-{{ col.key }}">
+    <div class="col-head">
+      <h2 id="col-{{ col.key }}">{{ t('status.' + col.key) }}</h2>
+      <span class="count{% if col.key == 'progress' and col.tasks.length > wipLimit %} is-over{% endif %}">{{ col.tasks.length }}{% if col.key == 'progress' %} / {{ wipLimit }}{% endif %}</span>
+    </div>
+    <p class="col-hint">{{ t('board.hint.' + col.key) }}</p>
+    {% if col.key == 'progress' and col.tasks.length > wipLimit %}<div class="wip-warn">{{ t('board.overWip', { n: wipLimit }) }}</div>{% endif %}
+    {% for task in col.tasks %}
+      {{ m.card(task, today) }}
+    {% else %}
+      <div class="empty-drop">{{ t('board.dropHere') }}</div>
+    {% endfor %}
+    {% if col.key == 'done' %}<a class="link-sm" href="/tasks?state=closed">{{ t('board.seeClosed') }}</a>{% endif %}
+  </section>
+  {% endfor %}
+</div>
+<p class="board-error" data-board-error hidden role="alert">{{ t('board.moveFailed') }}</p>
+{% endblock %}

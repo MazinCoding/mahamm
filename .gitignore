@@ -1,0 +1,30 @@
+# Dependencies and build output
+node_modules/
+public/fonts/
+coverage/
+dist/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.p12
+
+# Database dumps and backups
+*.sql.gz
+*.dump
+*.bak
+backups/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
