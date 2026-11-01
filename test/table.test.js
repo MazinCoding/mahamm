@@ -109,7 +109,7 @@ describe('the table view', () => {
       + `&color=${encodeURIComponent('<script>x</script>')}&person=not-a-uuid&label=abc&page=abc&q=${encodeURIComponent("' OR 1=1 --")}`);
     assert.equal(res.status, 200);
     assert.ok(!res.text.includes('<script>x</script>'));
-    assert.match(res.text, /data-color-by="status"/);
+    assert.match(res.text, /<option value="status" selected>/, 'an unknown colour falls back to status');
     assert.deepEqual(order(res.text), []);
     assert.equal((await q('SELECT count(*)::int AS n FROM tasks')).rows[0].n >= 5, true);
   });

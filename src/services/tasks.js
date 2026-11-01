@@ -142,12 +142,14 @@ export async function tableTasks({
   else if (status) where.push(`t.closed_at IS NULL AND t.status = ${add(status)}`);
   else if (closed) where.push(`(t.closed_at IS NULL OR t.closed_at > now() - interval '${RECENTLY_CLOSED_DAYS} days')`);
   else where.push('t.closed_at IS NULL');
-  if (due) {
-    const today = `(now() AT TIME ZONE ${add(timezone)})::date`;
-    if (due === 'overdue') where.push(`t.closed_at IS NULL AND t.due_date < ${today}`);
-    if (due === 'week') where.push(`t.due_date BETWEEN ${today} AND ${today} + 6`);
-    if (due === 'none') where.push('t.due_date IS NULL');
+  // Only add the time zone parameter when it's used: Postgres rejects a parameter it can't type.
+  const today = () => `(now() AT TIME ZONE ${add(timezone)}::text)::date`;
+  if (due === 'overdue') where.push(`t.closed_at IS NULL AND t.due_date < ${today()}`);
+  if (due === 'week') {
+    const d = today();
+    where.push(`t.due_date BETWEEN ${d} AND ${d} + 6`);
   }
+  if (due === 'none') where.push('t.due_date IS NULL');
   const whereSql = where.join(' AND ');
   const { total } = await one(`SELECT count(*)::int AS total FROM tasks t WHERE ${whereSql}`, params);
 
