@@ -20,7 +20,8 @@ await mkdir(out, { recursive: true });
 initDb(config);
 initCrypto(config.dataKey);
 
-const base = `http://127.0.0.1:${config.port}`;
+// Browse at the configured address so the Origin check sees the site's own origin.
+const base = config.origin;
 const admin = await one(`SELECT email, totp_secret_enc FROM users WHERE email = 'ahmed@example.com'`);
 const secret = decryptField(admin.totp_secret_enc);
 const idOf = async (title) => (await one('SELECT id FROM tasks WHERE title = $1', [title])).id;
@@ -46,6 +47,15 @@ for (let i = 0; ; i += 1) {
 
 const report = [];
 const note = (line) => { report.push(line); console.log(line); };
+let failures = 0;
+async function step(name, fn) {
+  try {
+    await fn();
+  } catch (err) {
+    failures += 1;
+    note(`[${name}] STEP FAILED: ${err.message.split('\n')[0]}`);
+  }
+}
 const browser = await chromium.launch();
 
 function watch(page, label) {
@@ -79,16 +89,18 @@ await page.waitForURL('**/board');
 await shot(page, '03-board');
 
 // Drag a card from To do to In progress, then onto Done.
-const card = page.locator(`[data-task-id="${ids.projector}"]`);
-await card.dragTo(page.locator('[data-status="progress"]'));
-await page.waitForLoadState('networkidle');
-await page.waitForTimeout(800);
-const inProgress = await page.locator(`[data-status="progress"] [data-task-id="${ids.projector}"]`).count();
-note(`drag to In progress: ${inProgress ? 'moved' : 'NOT moved'}`);
-await page.locator(`[data-task-id="${ids.projector}"]`).dragTo(page.locator('[data-status="done"]'));
-await page.waitForTimeout(800);
-note(`drag to Done opens: ${new URL(page.url()).pathname}`);
-await shot(page, '04-close-form-from-drag');
+await step('drag', async () => {
+  await page.locator(`[data-task-id="${ids.projector}"]`).dragTo(page.locator('[data-status="progress"]'));
+  await page.waitForTimeout(1200);
+  await page.waitForLoadState('networkidle');
+  const moved = await page.locator(`[data-status="progress"] [data-task-id="${ids.projector}"]`).count();
+  note(`check: drag to In progress ${moved ? 'saved' : 'DID NOT SAVE'}`);
+  if (!moved) failures += 1;
+  await page.locator(`[data-task-id="${ids.projector}"]`).dragTo(page.locator('[data-status="done"]'));
+  await page.waitForURL('**/close', { timeout: 5000 });
+  note(`check: drag to Done opens ${new URL(page.url()).pathname}`);
+  await shot(page, '04-close-form-from-drag');
+});
 
 const pages = [
   ['05-list', '/tasks'],
@@ -107,8 +119,10 @@ const pages = [
   ['18-not-found', '/tasks/999999'],
 ];
 for (const [name, url] of pages) {
-  await page.goto(`${base}${url}`);
-  await shot(page, name);
+  await step(name, async () => {
+    await page.goto(`${base}${url}`);
+    await shot(page, name);
+  });
 }
 
 // Excel import: upload a sheet with gaps and an unknown name.
@@ -123,32 +137,51 @@ ws.addRow(['Change the water dispenser filter', 'Kitchen', '', 'Not started', ''
 ws.addRow(['Repaint the parking lines', 'Car park', 'Hamed', 'Not started', '', '10/10/2026', '']);
 const sheetPath = path.join(out, 'facilities-requests.xlsx');
 await wb.xlsx.writeFile(sheetPath);
-await page.goto(`${base}/import`);
-await shot(page, '19-import-upload');
-await page.setInputFiles('#file', sheetPath);
-await page.click('form[action="/import"] button[type=submit]');
-await page.waitForURL('**/import/**');
-await shot(page, '20-import-review');
+await step('import', async () => {
+  await page.goto(`${base}/import`);
+  await shot(page, '19-import-upload');
+  await page.setInputFiles('#file', sheetPath);
+  await page.click('form[action="/import"] button[type=submit]');
+  await page.waitForURL('**/import/**', { timeout: 10000 });
+  await shot(page, '20-import-review');
+});
+
+// Close a task through the form, crediting someone else.
+await step('close-flow', async () => {
+  await page.goto(`${base}/tasks/${ids.safari}/close`);
+  await page.locator('input[name="credited"]').evaluateAll((boxes) => boxes.forEach((b) => { b.checked = false; }));
+  await page.locator('label.check', { hasText: 'Fatma Al-Harthi' }).click();
+  await page.click('form[data-close-form] button[type=submit]');
+  await page.waitForURL(`**/tasks/${ids.safari}`);
+  const text = await page.locator('.record').innerText();
+  note(`check: after closing, audit record says ${text.includes('Fatma Al-Harthi') && text.includes('Ahmed Al-Balushi') ? 'closed by Ahmed, completed by Fatma' : 'SOMETHING ELSE: ' + text.replace(/\s+/g, ' ')}`);
+  await shot(page, '20b-task-just-closed');
+});
 
 // Arabic, right to left.
-await page.goto(`${base}/board`);
-await page.click('.topbar form[action="/lang"] button');
-await page.waitForURL('**/board');
-await shot(page, '21-board-ar');
-for (const [name, url] of [['22-task-ar', `/tasks/${ids.coffee}`], ['23-close-form-ar', `/tasks/${ids.pdf}/close`], ['24-audit-ar', '/audit'], ['25-list-ar', '/tasks']]) {
-  await page.goto(`${base}${url}`);
-  await shot(page, name);
-}
-await page.click('.topbar form[action="/lang"] button');
-await page.waitForLoadState('networkidle');
+await step('arabic', async () => {
+  await page.goto(`${base}/board`);
+  await page.click('.topbar form[action="/lang"] button');
+  await page.waitForURL('**/board');
+  note(`check: html dir after switching language = ${await page.getAttribute('html', 'dir')}`);
+  await shot(page, '21-board-ar');
+  for (const [name, url] of [['22-task-ar', `/tasks/${ids.coffee}`], ['23-close-form-ar', `/tasks/${ids.pdf}/close`], ['24-audit-ar', '/audit'], ['25-list-ar', '/tasks']]) {
+    await page.goto(`${base}${url}`);
+    await shot(page, name);
+  }
+  await page.click('.topbar form[action="/lang"] button');
+  await page.waitForLoadState('networkidle');
+});
 
 // Phone width.
 const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, storageState: await desktop.storageState() });
 const mobile = await phone.newPage();
 watch(mobile, 'phone');
-for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tasks/${ids.pdf}`], ['28-phone-list', '/tasks'], ['29-phone-close', `/tasks/${ids.safari}/close`]]) {
-  await mobile.goto(`${base}${url}`);
-  await shot(mobile, name);
+for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tasks/${ids.pdf}`], ['28-phone-list', '/tasks'], ['29-phone-close', `/tasks/${ids.projector}/close`]]) {
+  await step(name, async () => {
+    await mobile.goto(`${base}${url}`);
+    await shot(mobile, name);
+  });
 }
 const anon = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true });
 const anonPage = await anon.newPage();
@@ -158,5 +191,6 @@ await shot(anonPage, '30-phone-login');
 await browser.close();
 server.kill('SIGTERM');
 await closeDb();
-note(`done: ${report.filter((l) => l.startsWith('[')).length} problems logged`);
+note(`done: ${failures} failed steps, ${report.filter((l) => l.startsWith('[')).length} problems logged`);
 await writeFile(path.join(out, 'report.txt'), `${report.join('\n')}\n\n--- server log ---\n${serverLog}`);
+process.exit(failures ? 1 : 0);

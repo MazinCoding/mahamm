@@ -72,6 +72,16 @@ describe('the shared board', () => {
     assert.equal(done.body.redirect, `/tasks/${id}/close`, 'Done always goes through the close form');
   });
 
+  test('requests with the headers a real browser sends are accepted from the site itself only', async () => {
+    const id = await makeTask(aishaAgent, { title: 'Browser headers' });
+    const token = await tokenFor(saidAgent);
+    const browserLike = (origin, site) => saidAgent.post(`/tasks/${id}/move`)
+      .set('X-CSRF-Token', token).set('Accept', 'application/json').set('Origin', origin).set('Sec-Fetch-Site', site);
+    assert.equal((await browserLike('http://localhost:3000', 'same-origin').send({ status: 'progress' })).status, 200);
+    assert.equal((await browserLike('https://evil.example', 'cross-site').send({ status: 'review' })).status, 403);
+    assert.equal((await browserLike('http://127.0.0.1:3000', 'same-origin').send({ status: 'review' })).status, 403, 'an address that is not the site is refused');
+  });
+
   test('moving to Review notifies the creator by email', async () => {
     const id = await makeTask(aishaAgent, { title: 'Please check this' });
     await post(saidAgent, `/tasks/${id}/move`, { status: 'review' });

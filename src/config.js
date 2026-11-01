@@ -51,6 +51,9 @@ export function loadConfig(env = process.env) {
   if (isProd && !origin.startsWith('https://')) {
     throw new ConfigError('Invalid or missing environment variables:\n  - APP_URL: must use https in production');
   }
+  // The site's own addresses: APP_URL (e.g. a custom domain) and, on Render,
+  // the onrender.com address, which keeps working after a domain is added.
+  const allowedOrigins = [...new Set([origin, c.RENDER_EXTERNAL_URL && new URL(c.RENDER_EXTERNAL_URL).origin].filter(Boolean))];
 
   const smtpKeys = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM'];
   const smtpSet = smtpKeys.filter((k) => c[k] !== undefined);
@@ -71,6 +74,7 @@ export function loadConfig(env = process.env) {
     port: c.PORT,
     appName: c.APP_NAME,
     origin,
+    allowedOrigins,
     timezone: c.APP_TIMEZONE,
     databaseUrl: c.DATABASE_URL,
     databaseSsl: c.DATABASE_SSL,

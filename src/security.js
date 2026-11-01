@@ -45,15 +45,16 @@ export function sameOriginWrites(config) {
   return function checkOrigin(req, res, next) {
     if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
     const site = req.headers['sec-fetch-site'];
-    if (site && site !== 'same-origin' && site !== 'none') return next(forbidden());
+    if (site && site !== 'same-origin' && site !== 'none') return next(forbidden(`sec-fetch-site ${site}`));
+    // "null" is what browsers send from no-referrer pages; the CSRF token still applies.
     const origin = req.headers.origin;
-    if (origin && origin !== 'null' && origin !== config.origin) return next(forbidden());
+    if (origin && origin !== 'null' && !config.allowedOrigins.includes(origin)) return next(forbidden('origin not allowed'));
     return next();
   };
 }
 
-function forbidden() {
-  const err = new Error('cross-site request blocked');
+function forbidden(why) {
+  const err = new Error(`cross-site request blocked (${why})`);
   err.status = 403;
   return err;
 }

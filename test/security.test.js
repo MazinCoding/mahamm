@@ -173,6 +173,12 @@ describe('helpers', () => {
     }
   });
 
+  test('the onrender.com address stays allowed after a custom domain is set', () => {
+    const c = loadConfig({ ...testEnv, APP_URL: 'https://tasks.example.om', RENDER_EXTERNAL_URL: 'https://mahamm.onrender.com' });
+    assert.equal(c.origin, 'https://tasks.example.om');
+    assert.deepEqual(c.allowedOrigins, ['https://tasks.example.om', 'https://mahamm.onrender.com']);
+  });
+
   test('redirect targets must be local paths', () => {
     assert.equal(safeLocalPath('/board'), '/board');
     assert.equal(safeLocalPath('//evil.com'), '/');
