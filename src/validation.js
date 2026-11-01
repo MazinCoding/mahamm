@@ -108,6 +108,9 @@ export const inviteSchema = z.object({ email: emailField, role: z.enum(['admin',
 
 export const nameField = z.preprocess(cleanLine, z.string().min(1).max(100));
 
+// A person without an account: just a name.
+export const personSchema = z.object({ name: nameField });
+
 export const labelSchema = z.object({
   name_en: z.preprocess(cleanLine, z.string().min(1).max(40)),
   name_ar: z.preprocess(cleanLine, z.string().min(1).max(40)),

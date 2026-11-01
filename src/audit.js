@@ -9,6 +9,7 @@ export const GROUPS = {
     'setup.completed', 'auth.signed_in', 'auth.signin_paused', 'auth.password_changed', 'auth.password_reset',
     'auth.two_factor_enabled', 'auth.two_factor_disabled', 'auth.recovery_code_used',
     'user.invited', 'invite.revoked', 'invite.accepted', 'user.role_changed', 'user.disabled', 'user.enabled',
+    'person.added', 'person.renamed',
     'user.reset_link_created', 'label.created', 'label.updated', 'audit.exported', 'settings.wip_limit_changed',
   ],
 };
@@ -83,9 +84,15 @@ export function describe(ev, t, { names = {}, labels = {} } = {}) {
     case 'auth.two_factor_enabled': return t('ev.twoFactorOn');
     case 'auth.two_factor_disabled': return t('ev.twoFactorOff');
     case 'auth.recovery_code_used': return t('ev.recoveryUsed');
-    case 'user.invited': return t('ev.invited', { email: d.email || '', role: t(`role.${d.role}`) });
+    case 'user.invited':
+      if (d.user_id) return t('ev.invitedPerson', { email: d.email || '', role: t(`role.${d.role}`), person: who(d.user_id) });
+      return t('ev.invited', { email: d.email || '', role: t(`role.${d.role}`) });
     case 'invite.revoked': return t('ev.inviteRevoked', { email: d.email || '' });
-    case 'invite.accepted': return t('ev.inviteAccepted');
+    case 'invite.accepted':
+      if (d.name_from) return t('ev.inviteAcceptedRenamed', { from: clip(d.name_from) });
+      return t('ev.inviteAccepted');
+    case 'person.added': return t('ev.personAdded', { name: clip(d.name) });
+    case 'person.renamed': return t('ev.personRenamed', { from: clip(d.from), to: clip(d.to) });
     case 'user.role_changed': return t('ev.roleChanged', { person: who(ev.subject_user_id), role: t(`role.${d.to}`) });
     case 'user.disabled': return t('ev.userDisabled', { person: who(ev.subject_user_id) });
     case 'user.enabled': return t('ev.userEnabled', { person: who(ev.subject_user_id) });

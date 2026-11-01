@@ -42,7 +42,7 @@ export default function authRoutes(config) {
       ? await one('SELECT id, email, name, password_hash, status, totp_enabled, password_changed_at FROM users WHERE email = $1', [email])
       : null;
     let ok = false;
-    if (user && user.status === 'active') ok = await verifyPassword(user.password_hash, password);
+    if (user && user.status === 'active' && user.password_hash) ok = await verifyPassword(user.password_hash, password);
     else await equaliseTiming(password);
 
     if (!ok) {
@@ -182,7 +182,7 @@ export default function authRoutes(config) {
   r.get('/invite/:token', async (req, res) => {
     const invite = await findInvite(req.params.token);
     if (!invite) return res.status(410).render('auth/message.njk', { title: req.t('auth.linkExpiredTitle'), body: req.t('auth.inviteExpired') });
-    res.render('auth/invite.njk', { token: req.params.token, invite, name: '' });
+    res.render('auth/invite.njk', { token: req.params.token, invite, name: invite.person_name || '' });
   });
 
   r.post('/invite/:token', async (req, res) => {
@@ -200,6 +200,7 @@ export default function authRoutes(config) {
     try {
       user = await acceptInvite(req.params.token, { name: nameResult.data, password }, req.ip);
     } catch (err) {
+      if (err instanceof HttpError && err.message === 'name taken') return again(req.t('auth.nameTaken'));
       if (err instanceof HttpError && (err.status === 409 || err.status === 410)) {
         return res.status(err.status).render('auth/message.njk', { title: req.t('auth.linkExpiredTitle'), body: req.t('auth.inviteExpired') });
       }

@@ -22,6 +22,18 @@
   <p class="hint full">{{ t('people.inviteHint') }}{% if not mail %} {{ t('people.noMail') }}{% endif %}</p>
 </form>
 
+<form class="form card-form inline-form" method="post" action="/people/add">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <h2 class="section-title full">{{ t('people.addTitle') }}</h2>
+  <div class="field grow">
+    <label for="add-name">{{ t('people.name') }}</label>
+    <input id="add-name" class="input" type="text" name="name" value="{{ values.name }}" maxlength="100" required dir="auto" autocomplete="off" {% if errors.name %}aria-invalid="true" aria-describedby="err-name"{% endif %}>
+    {% if errors.name %}<p class="error" id="err-name">{{ errors.name }}</p>{% endif %}
+  </div>
+  <div class="field"><button class="btn btn-secondary" type="submit">{{ t('people.add') }}</button></div>
+  <p class="hint full">{{ t('people.addHint') }}</p>
+</form>
+
 {% if invites.length %}
 <h2 class="section-title">{{ t('people.pending') }}</h2>
 <div class="box table-wrap">
@@ -30,7 +42,7 @@
     <tbody>
       {% for i in invites %}
       <tr>
-        <td dir="ltr">{{ i.email }}</td>
+        <td><span class="block" dir="ltr">{{ i.email }}</span>{% if i.person_name %}<span class="small muted block">{{ t('people.forPerson', { name: i.person_name }) }}</span>{% endif %}</td>
         <td>{{ t('role.' + i.role) }}</td>
         <td>{{ i.invited_by_name }}</td>
         <td>{{ fmt.dateTime(i.expires_at) }}</td>
@@ -60,9 +72,42 @@
     <tbody>
       {% for u in users %}
       <tr{% if u.status == 'disabled' %} class="is-dim"{% endif %}>
-        <td><span class="person">{{ m.avatar(u) }}<span><span class="strong block">{{ u.name }}{% if u.id == user.id %} ({{ t('common.you') }}){% endif %}</span><span class="small muted block" dir="ltr">{{ u.email }}</span></span></span></td>
         <td>
-          {% if u.id == user.id %}<span class="chip {{ 'c-teal' if u.role == 'admin' else 'c-gray' }}">{{ t('role.' + u.role) }}</span>{% else %}
+          <span class="person">{{ m.avatar(u) }}<span>
+            <span class="strong block"><bdi>{{ u.name }}</bdi>{% if u.id == user.id %} ({{ t('common.you') }}){% endif %}</span>
+            {% if u.no_account %}<span class="chip c-amber">{{ t('people.noAccount') }}</span>{% else %}<span class="small muted block" dir="ltr">{{ u.email }}</span>{% endif %}
+          </span></span>
+          {% if u.no_account and u.status == 'active' %}
+          <div class="person-tools">
+            <details>
+              <summary class="btn btn-link btn-sm">{{ t('people.inviteAction') }}</summary>
+              <form class="mini-form" method="post" action="/people/{{ u.id }}/invite">
+                <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+                <p class="hint">{{ t('people.inviteFor', { name: u.name }) }}</p>
+                <label class="sr-only" for="pi-email-{{ u.id }}">{{ t('people.email') }}</label>
+                <input id="pi-email-{{ u.id }}" class="input input-sm" type="email" name="email" maxlength="254" required dir="ltr" placeholder="name@company.om">
+                <label class="sr-only" for="pi-role-{{ u.id }}">{{ t('people.role') }}</label>
+                <select id="pi-role-{{ u.id }}" class="input input-sm" name="role">
+                  <option value="member" selected>{{ t('role.member') }}</option>
+                  <option value="admin">{{ t('role.admin') }}</option>
+                </select>
+                <button class="btn btn-primary btn-sm" type="submit">{{ t('people.invite') }}</button>
+              </form>
+            </details>
+            <details>
+              <summary class="btn btn-link btn-sm">{{ t('people.renameAction') }}</summary>
+              <form class="mini-form" method="post" action="/people/{{ u.id }}/rename">
+                <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+                <label class="sr-only" for="pn-name-{{ u.id }}">{{ t('people.name') }}</label>
+                <input id="pn-name-{{ u.id }}" class="input input-sm" type="text" name="name" value="{{ u.name }}" maxlength="100" required dir="auto" autocomplete="off">
+                <button class="btn btn-secondary btn-sm" type="submit">{{ t('common.save') }}</button>
+              </form>
+            </details>
+          </div>
+          {% endif %}
+        </td>
+        <td>
+          {% if u.id == user.id or u.no_account %}<span class="chip {{ 'c-teal' if u.role == 'admin' else 'c-gray' }}">{{ t('role.' + u.role) }}</span>{% else %}
           <form method="post" action="/people/{{ u.id }}/role" class="inline role-form">
             <input type="hidden" name="_csrf" value="{{ csrfToken }}">
             <label class="sr-only" for="role-{{ u.id }}">{{ t('people.role') }}</label>
@@ -75,17 +120,19 @@
           {% endif %}
         </td>
         <td><span class="chip {{ 'c-green' if u.status == 'active' else 'c-gray' }}">{{ t('people.state.' + u.status) }}</span></td>
-        <td>{% if u.totp_enabled %}<span class="ok-text">{{ t('common.on') }}</span>{% else %}<span class="warn-text">{{ t('common.off') }}</span>{% endif %}</td>
+        <td>{% if u.no_account %}<span class="muted">—</span>{% elif u.totp_enabled %}<span class="ok-text">{{ t('common.on') }}</span>{% else %}<span class="warn-text">{{ t('common.off') }}</span>{% endif %}</td>
         <td>{% if u.last_seen_at %}{{ fmt.ago(u.last_seen_at) }}{% else %}<em class="muted">{{ t('people.never') }}</em>{% endif %}</td>
         <td>{{ u.completed }}</td>
         <td class="actions">
           {% if u.id != user.id %}
             {% if u.status == 'active' %}
+            {% if not u.no_account %}
             <form method="post" action="/people/{{ u.id }}/reset-link" class="inline">
               <input type="hidden" name="_csrf" value="{{ csrfToken }}">
               <button class="btn btn-link btn-sm" type="submit">{{ t('people.resetLink') }}</button>
             </form>
-            <form method="post" action="/people/{{ u.id }}/status" class="inline" data-confirm="{{ t('people.confirmDisable', { name: u.name }) }}">
+            {% endif %}
+            <form method="post" action="/people/{{ u.id }}/status" class="inline" data-confirm="{{ t('people.confirmDisablePerson' if u.no_account else 'people.confirmDisable', { name: u.name }) }}">
               <input type="hidden" name="_csrf" value="{{ csrfToken }}"><input type="hidden" name="status" value="disabled">
               <button class="btn btn-link btn-sm danger" type="submit">{{ t('people.disable') }}</button>
             </form>
