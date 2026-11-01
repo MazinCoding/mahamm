@@ -105,6 +105,8 @@ await step('drag', async () => {
 const pages = [
   ['05-list', '/tasks'],
   ['06-list-closed', '/tasks?state=closed'],
+  ['06b-table', '/table'],
+  ['06c-table-closed-by-priority', '/table?closed=1&color=priority&sort=due&dir=asc'],
   ['07-task-closed-with-credit', `/tasks/${ids.coffee}`],
   ['08-task-open-files-comments', `/tasks/${ids.pdf}`],
   ['09-task-flagged', `/tasks/${ids.paper}`],
@@ -124,6 +126,17 @@ for (const [name, url] of pages) {
     await shot(page, name);
   });
 }
+
+// Table: colouring switches without reloading and is remembered after a reload.
+await step('table-colour', async () => {
+  await page.goto(`${base}/table`);
+  await page.selectOption('[data-color-by-select]', 'label');
+  note(`check: table colour after choosing First label = ${await page.getAttribute('[data-sheet]', 'data-color-by')}`);
+  await page.goto(`${base}/table?sort=title`);
+  note(`check: table colour after reload = ${await page.getAttribute('[data-sheet]', 'data-color-by')}`);
+  await shot(page, '06d-table-by-label');
+  await page.selectOption('[data-color-by-select]', 'status');
+});
 
 // Excel import: upload a sheet with gaps and an unknown name.
 const wb = new ExcelJS.Workbook();
@@ -165,7 +178,7 @@ await step('arabic', async () => {
   await page.waitForURL('**/board');
   note(`check: html dir after switching language = ${await page.getAttribute('html', 'dir')}`);
   await shot(page, '21-board-ar');
-  for (const [name, url] of [['22-task-ar', `/tasks/${ids.coffee}`], ['23-close-form-ar', `/tasks/${ids.pdf}/close`], ['24-audit-ar', '/audit'], ['25-list-ar', '/tasks']]) {
+  for (const [name, url] of [['22-task-ar', `/tasks/${ids.coffee}`], ['23-close-form-ar', `/tasks/${ids.pdf}/close`], ['24-audit-ar', '/audit'], ['25-list-ar', '/tasks'], ['25b-table-ar', '/table?closed=1']]) {
     await page.goto(`${base}${url}`);
     await shot(page, name);
   }
@@ -177,7 +190,7 @@ await step('arabic', async () => {
 const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, storageState: await desktop.storageState() });
 const mobile = await phone.newPage();
 watch(mobile, 'phone');
-for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tasks/${ids.pdf}`], ['28-phone-list', '/tasks'], ['29-phone-close', `/tasks/${ids.projector}/close`]]) {
+for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tasks/${ids.pdf}`], ['28-phone-list', '/tasks'], ['28b-phone-table', '/table'], ['29-phone-close', `/tasks/${ids.projector}/close`]]) {
   await step(name, async () => {
     await mobile.goto(`${base}${url}`);
     await shot(mobile, name);

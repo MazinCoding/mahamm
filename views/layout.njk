@@ -22,6 +22,7 @@
     <nav class="nav" aria-label="{{ t('nav.main') }}">
       <a href="/board" {% if section == 'board' %}aria-current="page"{% endif %}>{{ t('nav.board') }}</a>
       <a href="/tasks" {% if section == 'tasks' %}aria-current="page"{% endif %}>{{ t('nav.list') }}</a>
+      <a href="/table" {% if section == 'table' %}aria-current="page"{% endif %}>{{ t('nav.table') }}</a>
       <a href="/audit" {% if section == 'audit' %}aria-current="page"{% endif %}>{{ t('nav.audit') }}</a>
       {% if user.isAdmin %}
       <a href="/people" {% if section == 'people' %}aria-current="page"{% endif %}>{{ t('nav.people') }}</a>

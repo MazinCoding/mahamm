@@ -5,10 +5,12 @@ import { q } from '../db.js';
 import { limiter } from '../ratelimit.js';
 import { MAX_ATTACHMENT_BYTES, checkAttachment, uploadThenCsrf } from '../uploads.js';
 import {
-  HttpError, OPEN_STATUSES, PAGE_SIZE, addAttachment, addComment, boardStats, boardTasks, canEdit, canResolveFlags,
-  closeTask, createTask, flagTask, getAttachment, getTask, listTasks, moveTask, removeAttachment, reopenTask, resolveFlag,
-  taskDetail, updateTask,
+  HttpError, OPEN_STATUSES, PAGE_SIZE, PRIORITIES, TABLE_DUE, TABLE_SORTS, addAttachment, addComment, boardStats, boardTasks,
+  canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, listTasks, moveTask, removeAttachment,
+  reopenTask, resolveFlag, tableTasks, taskDetail, updateTask,
 } from '../services/tasks.js';
+
+const TABLE_COLORS = ['status', 'priority', 'label', 'none'];
 import { activePeople, allPeopleNames } from '../services/users.js';
 import {
   closeSchema, commentSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
@@ -84,6 +86,55 @@ export default function taskRoutes(config) {
       prevUrl: filters.page > 1 ? query({ page: filters.page - 1 }) : null,
       nextUrl: filters.page * PAGE_SIZE < total ? query({ page: filters.page + 1 }) : null,
       hasFilters: !!(filters.q || filters.label || filters.person || filters.priority || filters.flagged),
+    });
+  });
+
+  // Spreadsheet-style table. Every option comes from a fixed list; anything else is ignored.
+  r.get('/table', requireAuth, async (req, res) => {
+    const pick = (v, allowed) => (allowed.includes(v) ? v : null);
+    const closed = req.query.closed === '1';
+    const filters = {
+      q: String(req.query.q || '').slice(0, 100),
+      status: pick(req.query.status, closed ? [...OPEN_STATUSES, 'done'] : OPEN_STATUSES),
+      label: idParam(req.query.label),
+      person: uuidParam(req.query.person),
+      priority: pick(req.query.priority, PRIORITIES),
+      due: pick(req.query.due, TABLE_DUE),
+      flagged: req.query.flagged === '1',
+      closed,
+      sort: pick(req.query.sort, Object.keys(TABLE_SORTS)),
+      dir: pick(req.query.dir, ['asc', 'desc']),
+      color: pick(req.query.color, TABLE_COLORS) || 'status',
+      page: Math.min(idParam(req.query.page) || 1, 10000),
+    };
+    const [{ rows, total }, labels, people] = await Promise.all([
+      tableTasks({ ...filters, timezone: config.timezone }), allLabels(), allPeopleNames(),
+    ]);
+    const query = (extra = {}) => {
+      const m = { ...filters, ...extra };
+      const p = new URLSearchParams();
+      for (const key of ['q', 'status', 'label', 'person', 'priority', 'due', 'sort', 'dir']) if (m[key]) p.set(key, m[key]);
+      if (m.flagged) p.set('flagged', '1');
+      if (m.closed) p.set('closed', '1');
+      if (m.color !== 'status') p.set('color', m.color);
+      if (m.page > 1) p.set('page', m.page);
+      const s = p.toString();
+      return s ? `/table?${s}` : '/table';
+    };
+    // Header links: same column flips the direction, a new column starts at its natural one.
+    const sortLinks = Object.fromEntries(Object.entries(TABLE_SORTS).map(([key, s]) => {
+      const current = filters.sort === key ? (filters.dir || s.dir) : null;
+      const next = current ? (current === 'asc' ? 'desc' : 'asc') : s.dir;
+      return [key, { url: query({ sort: key, dir: next, page: 1 }), current }];
+    }));
+    res.render('table.njk', {
+      rows, total, labels, people, filters, sortLinks,
+      today: new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(new Date()),
+      pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+      prevUrl: filters.page > 1 ? query({ page: filters.page - 1 }) : null,
+      nextUrl: filters.page * PAGE_SIZE < total ? query({ page: filters.page + 1 }) : null,
+      clearUrl: query({ q: '', status: null, label: null, person: null, priority: null, due: null, flagged: false, page: 1 }),
+      hasFilters: !!(filters.q || filters.status || filters.label || filters.person || filters.priority || filters.due || filters.flagged),
     });
   });
 
