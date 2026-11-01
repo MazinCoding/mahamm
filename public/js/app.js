@@ -114,6 +114,230 @@
     });
   }
 
+  // Table ribbon. Without JavaScript the ribbon is a normal form and the row
+  // checkboxes belong to it. With JavaScript: click selects a row, Shift-click a
+  // range, Ctrl or Cmd-click adds one; clicking a cell opens a small menu for
+  // that task; the brush applies the chosen value to each row you click.
+  var ribbon = document.querySelector('[data-ribbon]');
+  var sheetTable = document.querySelector('.sheet');
+  if (ribbon && sheetTable) {
+    var SEL_KEY = 'mahamm.table.selected';
+    var BRUSH_KEY = 'mahamm.table.brush';
+    var session = {
+      get: function (key) { try { return JSON.parse(window.sessionStorage.getItem(key) || 'null'); } catch (e) { return null; } },
+      set: function (key, value) { try { window.sessionStorage.setItem(key, JSON.stringify(value)); } catch (e) { /* not kept: fine */ } },
+      drop: function (key) { try { window.sessionStorage.removeItem(key); } catch (e) { /* nothing to drop */ } },
+    };
+    var statusLine = ribbon.querySelector('[data-ribbon-status]');
+    var brushBtn = ribbon.querySelector('[data-brush]');
+    var rows = Array.prototype.slice.call(sheetTable.querySelectorAll('tbody tr[data-task-id]'));
+    var here = window.location.pathname + window.location.search;
+    var anchor = null;
+    var menu = null;
+    var brush = { on: false, payload: null, label: '' };
+
+    var msg = function (name, vars) {
+      var text = ribbon.getAttribute('data-msg-' + name) || '';
+      Object.keys(vars || {}).forEach(function (k) { text = text.split('{' + k + '}').join(String(vars[k])); });
+      return text;
+    };
+    var say = function (text, warn) {
+      statusLine.textContent = text;
+      statusLine.classList.toggle('is-warn', !!warn);
+    };
+    var checkOf = function (row) { return row.querySelector('.row-check'); };
+    var idOf = function (row) { return row.getAttribute('data-task-id'); };
+    var selectedIds = function () { return rows.filter(function (r) { return checkOf(r).checked; }).map(idOf); };
+    var refresh = function () {
+      rows.forEach(function (r) { r.classList.toggle('is-selected', checkOf(r).checked); });
+      if (brush.on) return;
+      var n = selectedIds().length;
+      say(n ? msg('count', { n: n }) : msg('hint'));
+    };
+    var only = function (row) { rows.forEach(function (r) { checkOf(r).checked = r === row; }); };
+    var range = function (row) {
+      var a = rows.indexOf(anchor);
+      var b = rows.indexOf(row);
+      rows.forEach(function (r, i) { checkOf(r).checked = i >= Math.min(a, b) && i <= Math.max(a, b); });
+    };
+
+    var payloadFrom = function (container, btn) {
+      var person = container.querySelector('[name="assignee"]');
+      var due = container.querySelector('[name="due"]');
+      return { apply: btn.value, assignee: person ? person.value : '', due: due ? due.value : '' };
+    };
+    var labelFor = function (container, btn) {
+      var text = btn.textContent.trim();
+      var person = container.querySelector('[name="assignee"]');
+      var due = container.querySelector('[name="due"]');
+      if (btn.value === 'assignee' && person && person.selectedIndex >= 0) text += ': ' + person.options[person.selectedIndex].text;
+      if (btn.value === 'due' && due && due.value) text += ': ' + due.value;
+      return text;
+    };
+
+    var send = function (ids, payload) {
+      fetch('/tasks/bulk', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ ids: ids.map(Number), apply: payload.apply, assignee: payload.assignee, due: payload.due, back: here }),
+      }).then(function (res) {
+        return res.json().then(function (body) { return { ok: res.ok, body: body }; });
+      }).then(function (r) {
+        if (!r.ok) {
+          say((r.body && r.body.message) || msg('failed'), true);
+          return;
+        }
+        // The page reloads to show the saved values; keep the selection and the brush.
+        session.set(SEL_KEY, { path: here, ids: selectedIds() });
+        window.location.reload();
+      }).catch(function () { say(msg('failed'), true); });
+    };
+
+    var markArmed = function (value) {
+      ribbon.querySelectorAll('.rb.is-armed').forEach(function (b) { b.classList.remove('is-armed'); });
+      if (!value) return;
+      ribbon.querySelectorAll('button[name="apply"]').forEach(function (b) { if (b.value === value) b.classList.add('is-armed'); });
+    };
+    var setBrush = function (on) {
+      brush.on = on;
+      brushBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+      sheetTable.classList.toggle('is-brushing', on && !!brush.payload);
+      if (!on) {
+        brush.payload = null;
+        markArmed(null);
+        session.drop(BRUSH_KEY);
+        refresh();
+      } else if (!brush.payload) {
+        say(msg('brush-pick'));
+      }
+    };
+    var arm = function (payload, label) {
+      brush.payload = payload;
+      brush.label = label;
+      markArmed(payload.apply);
+      sheetTable.classList.add('is-brushing');
+      session.set(BRUSH_KEY, { payload: payload, label: label, path: here });
+      say(msg('brush', { v: label }));
+    };
+
+    var closeMenu = function () {
+      if (menu) menu.remove();
+      menu = null;
+    };
+    var openMenu = function (cell, row) {
+      closeMenu();
+      var id = idOf(row);
+      if (row.hasAttribute('data-closed')) { say(msg('closed', { n: '#' + id }), true); return; }
+      if (cell.hasAttribute('data-locked')) { say(msg('locked', { n: '#' + id }), true); return; }
+      var group = ribbon.querySelector('[data-group="' + cell.getAttribute('data-field') + '"]');
+      if (!group) return;
+      only(row);
+      anchor = row;
+      refresh();
+      var groupName = group.querySelector('.ribbon-label').textContent.trim();
+      menu = document.createElement('div');
+      menu.className = 'cell-menu';
+      menu.setAttribute('role', 'dialog');
+      menu.setAttribute('aria-label', '#' + id + ' · ' + groupName);
+      var title = document.createElement('p');
+      title.className = 'cell-menu-title';
+      title.textContent = '#' + id + ' · ' + groupName;
+      var body = group.querySelector('.ribbon-buttons').cloneNode(true);
+      body.querySelectorAll('label').forEach(function (l) { l.remove(); });
+      body.querySelectorAll('[id]').forEach(function (el) { el.removeAttribute('id'); el.setAttribute('aria-label', groupName); });
+      body.querySelectorAll('button').forEach(function (b) { b.type = 'button'; b.classList.remove('is-armed'); });
+      menu.appendChild(title);
+      menu.appendChild(body);
+      document.body.appendChild(menu);
+      var box = cell.getBoundingClientRect();
+      var width = document.documentElement.clientWidth;
+      var left = Math.max(8, Math.min(box.left, width - menu.offsetWidth - 8));
+      menu.style.top = (window.scrollY + box.bottom + 4) + 'px';
+      menu.style.left = (window.scrollX + left) + 'px';
+      menu.addEventListener('click', function (e) {
+        var btn = e.target.closest('button');
+        if (btn) send([id], payloadFrom(menu, btn));
+      });
+      var first = menu.querySelector('button, select, input');
+      if (first) first.focus();
+    };
+
+    // Selection and the brush.
+    sheetTable.addEventListener('mousedown', function (e) {
+      if (e.shiftKey && e.target.closest('tbody tr')) e.preventDefault();
+    });
+    sheetTable.addEventListener('click', function (e) {
+      var row = e.target.closest('tbody tr[data-task-id]');
+      if (!row || e.target.closest('a')) return;
+      if (brush.on && brush.payload) {
+        e.preventDefault();
+        if (row.hasAttribute('data-closed')) { say(msg('closed', { n: '#' + idOf(row) }), true); return; }
+        only(row);
+        send([idOf(row)], brush.payload);
+        return;
+      }
+      if (e.target.classList.contains('row-check')) {
+        if (e.shiftKey && anchor) range(row);
+        anchor = row;
+        refresh();
+        return;
+      }
+      if (e.shiftKey && anchor) { range(row); refresh(); return; }
+      if (e.ctrlKey || e.metaKey) { checkOf(row).checked = !checkOf(row).checked; anchor = row; refresh(); return; }
+      var cell = e.target.closest('[data-field]');
+      if (cell) { openMenu(cell, row); return; }
+      only(row);
+      anchor = row;
+      refresh();
+    });
+
+    // Ribbon buttons apply to the selection, or load the brush when it's on.
+    ribbon.addEventListener('submit', function (e) {
+      var btn = e.submitter;
+      if (!btn || btn.name !== 'apply') return;
+      e.preventDefault();
+      closeMenu();
+      var payload = payloadFrom(ribbon, btn);
+      if (brush.on) { arm(payload, labelFor(ribbon, btn)); return; }
+      var ids = selectedIds();
+      if (!ids.length) { say(msg('select'), true); return; }
+      send(ids, payload);
+    });
+    brushBtn.addEventListener('click', function () { setBrush(!brush.on); });
+    ribbon.querySelector('[data-select-all]').addEventListener('click', function () {
+      rows.forEach(function (r) { checkOf(r).checked = true; });
+      refresh();
+    });
+    ribbon.querySelector('[data-select-none]').addEventListener('click', function () {
+      rows.forEach(function (r) { checkOf(r).checked = false; });
+      refresh();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (menu) { closeMenu(); return; }
+      if (brush.on) setBrush(false);
+    });
+    document.addEventListener('click', function (e) {
+      if (menu && !menu.contains(e.target) && !e.target.closest('[data-field]')) closeMenu();
+    });
+
+    // Start-up: show the JavaScript tools, then restore the selection and brush after a save.
+    ribbon.querySelector('[data-js-tools]').hidden = false;
+    var kept = session.get(SEL_KEY);
+    session.drop(SEL_KEY);
+    if (kept && kept.path === here && Array.isArray(kept.ids)) {
+      rows.forEach(function (r) { checkOf(r).checked = kept.ids.indexOf(idOf(r)) >= 0; });
+    }
+    refresh();
+    var savedBrush = session.get(BRUSH_KEY);
+    if (savedBrush && savedBrush.payload && savedBrush.path === here) {
+      brush.on = true;
+      brushBtn.setAttribute('aria-pressed', 'true');
+      arm(savedBrush.payload, savedBrush.label || '');
+    }
+  }
+
   // Close form: show "who did it" only for Completed, "duplicate of" only for Duplicate.
   var closeForm = document.querySelector('[data-close-form]');
   if (closeForm) {

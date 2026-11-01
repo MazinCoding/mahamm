@@ -43,6 +43,35 @@ export const closeSchema = z.object({
   duplicate_of: z.preprocess((v) => cleanLine(v).replace(/^#/, ''), z.union([z.literal(''), z.string().regex(/^\d{1,9}$/)])),
 });
 
+// Table ribbon. Buttons send apply="op:value"; the person and date pickers send
+// apply="assignee" or "due" with the value in their own field.
+const bulkValues = {
+  status: z.enum(['backlog', 'todo', 'progress', 'review']),
+  priority: z.enum(['high', 'med', 'low']),
+  label: z.string().regex(/^\d{1,9}$/),
+  assignee: z.string().uuid(),
+  due: z.union([z.literal(''), isoDate]),
+};
+
+export const bulkSchema = z.preprocess((input) => {
+  const body = input && typeof input === 'object' ? input : {};
+  const [op, inline = ''] = String(body.apply ?? '').split(':');
+  if (op === 'due-clear') return { ids: body.ids, op: 'due', value: '' };
+  let value = inline;
+  if (op === 'assignee') value = body.assignee;
+  // "Set date" with no date is a mistake, not a request to clear it (that has its own button).
+  if (op === 'due') value = clean(body.due) || 'missing';
+  return { ids: body.ids, op, value: clean(value) };
+}, z.object({
+  ids: z.preprocess(toArray, z.array(z.coerce.number().int().positive().max(999999999)).min(1).max(50))
+    .transform((ids) => [...new Set(ids)]),
+  op: z.enum(['status', 'priority', 'label', 'assignee', 'due']),
+  value: z.string().max(40),
+}).superRefine((v, ctx) => {
+  const check = bulkValues[v.op];
+  if (check && !check.safeParse(v.value).success) ctx.addIssue({ code: 'custom', path: ['value'], message: 'invalid' });
+}));
+
 export const commentSchema = z.object({ body: z.preprocess(clean, z.string().min(1).max(5000)) });
 
 export const flagSchema = z.object({

@@ -8,6 +8,7 @@
   <a class="sort-link" href="{{ s.url }}">{{ label }}<span class="sort-mark" aria-hidden="true">{% if s.current == 'asc' %}▲{% elif s.current == 'desc' %}▼{% endif %}</span></a>
 </th>
 {%- endmacro %}
+{% macro lockMark(task) %}{% if not task.editable and not task.closed_at %}<span class="lock" role="img" aria-label="{{ t('table.lockSr') }}" title="{{ t('table.lockSr') }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>{% endif %}{% endmacro %}
 <div class="page-head">
   <div>
     <h1>{{ t('table.title') }}</h1>
@@ -64,6 +65,55 @@
   <p class="sheet-count">{{ t('table.count', { n: total }) }}</p>
 
   {% if rows.length %}
+  {# The ribbon. Row checkboxes join this form through form="bulk", so it also works without JavaScript. #}
+  <form id="bulk" class="ribbon" method="post" action="/tasks/bulk" data-ribbon
+        data-msg-select="{{ t('table.selectFirst') }}" data-msg-count="{{ t('table.selected') }}" data-msg-hint="{{ t('table.selectHint') }}"
+        data-msg-failed="{{ t('table.failed') }}" data-msg-locked="{{ t('table.locked') }}" data-msg-closed="{{ t('table.closedRow') }}"
+        data-msg-brush="{{ t('table.brushOn') }}" data-msg-brush-pick="{{ t('table.brushPick') }}">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <input type="hidden" name="back" value="{{ currentUrl }}">
+    {# Pressing Enter in the date field uses the first submit button, so make that "Set date". #}
+    <button class="sr-only" type="submit" name="apply" value="due" tabindex="-1" aria-hidden="true">{{ t('table.setDue') }}</button>
+    <div class="ribbon-group" role="group" aria-labelledby="rg-status" data-group="status">
+      <span class="ribbon-label" id="rg-status">{{ t('field.status') }}</span>
+      <div class="ribbon-buttons">{% for s in ['backlog', 'todo', 'progress', 'review'] %}<button class="rb s-{{ s }}" type="submit" name="apply" value="status:{{ s }}">{{ t('status.' + s) }}</button>{% endfor %}</div>
+    </div>
+    <div class="ribbon-group" role="group" aria-labelledby="rg-prio" data-group="priority">
+      <span class="ribbon-label" id="rg-prio">{{ t('field.priority') }}</span>
+      <div class="ribbon-buttons">{% for p in ['high', 'med', 'low'] %}<button class="rb prio-{{ p }}" type="submit" name="apply" value="priority:{{ p }}">{{ t('priority.' + p) }}</button>{% endfor %}</div>
+    </div>
+    <div class="ribbon-group" role="group" aria-labelledby="rg-labels" data-group="labels">
+      <span class="ribbon-label" id="rg-labels">{{ t('table.labelsToggle') }}</span>
+      <div class="ribbon-buttons">{% for l in labels %}<button class="rb c-{{ l.color }}" type="submit" name="apply" value="label:{{ l.id }}">{{ labelName(l) }}</button>{% endfor %}</div>
+    </div>
+    <div class="ribbon-group" role="group" aria-labelledby="rg-people" data-group="assignees">
+      <span class="ribbon-label" id="rg-people">{{ t('field.assignees') }}</span>
+      <div class="ribbon-buttons">
+        <label class="sr-only" for="rb-person">{{ t('list.person') }}</label>
+        <select id="rb-person" class="input input-sm" name="assignee">{% for p in assignable %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select>
+        <button class="rb" type="submit" name="apply" value="assignee">{{ t('table.assignToggle') }}</button>
+      </div>
+    </div>
+    <div class="ribbon-group" role="group" aria-labelledby="rg-due" data-group="due">
+      <span class="ribbon-label" id="rg-due">{{ t('field.due') }}</span>
+      <div class="ribbon-buttons">
+        <label class="sr-only" for="rb-due">{{ t('field.due') }}</label>
+        <input id="rb-due" class="input input-sm" type="date" name="due" min="2000-01-01" max="2100-12-31">
+        <button class="rb" type="submit" name="apply" value="due">{{ t('table.setDue') }}</button>
+        <button class="rb" type="submit" name="apply" value="due-clear">{{ t('table.clearDue') }}</button>
+      </div>
+    </div>
+    <div class="ribbon-group" role="group" aria-labelledby="rg-select" hidden data-js-tools>
+      <span class="ribbon-label" id="rg-select">{{ t('table.selection') }}</span>
+      <div class="ribbon-buttons">
+        <button class="rb" type="button" data-select-all>{{ t('table.selectAll') }}</button>
+        <button class="rb" type="button" data-select-none>{{ t('table.selectNone') }}</button>
+        <button class="rb" type="button" data-brush aria-pressed="false">{{ t('table.brush') }}</button>
+      </div>
+    </div>
+    <p class="ribbon-status" data-ribbon-status role="status" aria-live="polite">{{ t('table.selectHintNoJs') }}</p>
+  </form>
+
   <div class="sheet-wrap" data-sheet data-color-by="{{ filters.color }}">
     <table class="sheet">
       <caption class="sr-only">{{ t('table.caption') }}</caption>
@@ -80,15 +130,17 @@
       </thead>
       <tbody>
         {% for task in rows %}
-        <tr class="st-{{ 'closed' if task.closed_at else task.status }} pr-{{ task.priority }} lc-{{ task.labels[0].color if task.labels.length else 'none' }}{% if task.closed_at %} is-closed{% endif %}" data-task-id="{{ task.id }}">
+        {% set lock = '' if task.editable else ' data-locked' %}
+        <tr class="st-{{ 'closed' if task.closed_at else task.status }} pr-{{ task.priority }} lc-{{ task.labels[0].color if task.labels.length else 'none' }}{% if task.closed_at %} is-closed{% endif %}" data-task-id="{{ task.id }}"{% if task.closed_at %} data-closed{% endif %}>
           <th scope="row" class="col-task">
             <span class="cell-task">
+              <input class="row-check" type="checkbox" name="ids" value="{{ task.id }}" form="bulk" aria-label="{{ t('table.selectRow', { n: '#' + task.id }) }}">
               <span class="num">{% if task.closed_at %}{{ m.stateIcon(task) }}{% endif %}#{{ task.id }}</span>
               <a class="cell-title" dir="auto" href="/tasks/{{ task.id }}">{{ task.title }}</a>
               {% if task.open_flags %}<span class="chip c-red">{{ t('flag.flagged') }}</span>{% endif %}
             </span>
           </th>
-          <td>
+          <td data-field="status">
             {% if task.closed_at %}
               <span class="status-chip {{ 's-done' if task.close_reason == 'completed' else 's-closed' }}">{{ t('status.done') if task.close_reason == 'completed' else t('state.closedReason', { reason: t('reason.' + task.close_reason) }) }}</span>
               <span class="cell-note">{{ m.closedLine(task) }}</span>
@@ -96,13 +148,13 @@
               <span class="status-chip s-{{ task.status }}">{{ t('status.' + task.status) }}</span>
             {% endif %}
           </td>
-          <td>{{ m.prio(task.priority) }}</td>
-          <td>{% if task.labels.length %}<span class="chips">{% for l in task.labels %}{{ m.label(l) }}{% endfor %}</span>{% else %}<span class="missing">{{ t('table.noLabels') }}</span>{% endif %}</td>
-          <td>{% if task.assignees.length %}<span class="people-cell">{% for p in task.assignees %}<span class="person"><span class="av {{ avatarClass(p.id) }}" aria-hidden="true">{{ initials(p.name) }}</span><bdi>{{ p.name }}</bdi></span>{% endfor %}</span>{% else %}<span class="missing">{{ t('table.unassigned') }}</span>{% endif %}</td>
-          <td class="nowrap">
+          <td data-field="priority"{{ lock }}>{{ m.prio(task.priority) }}{{ lockMark(task) }}</td>
+          <td data-field="labels"{{ lock }}>{% if task.labels.length %}<span class="chips">{% for l in task.labels %}{{ m.label(l) }}{% endfor %}</span>{% else %}<span class="missing">{{ t('table.noLabels') }}</span>{% endif %}{{ lockMark(task) }}</td>
+          <td data-field="assignees"{{ lock }}>{% if task.assignees.length %}<span class="people-cell">{% for p in task.assignees %}<span class="person"><span class="av {{ avatarClass(p.id) }}" aria-hidden="true">{{ initials(p.name) }}</span><bdi>{{ p.name }}</bdi></span>{% endfor %}</span>{% else %}<span class="missing">{{ t('table.unassigned') }}</span>{% endif %}{{ lockMark(task) }}</td>
+          <td class="nowrap" data-field="due"{{ lock }}>
             {% if not task.due_date %}<span class="missing">{{ t('table.noDue') }}</span>
             {% elif not task.closed_at and task.due_date < today %}<span class="due is-overdue">{{ t('task.overdue', { d: fmt.short(task.due_date) }) }}</span>
-            {% else %}{{ fmt.short(task.due_date) }}{% endif %}
+            {% else %}{{ fmt.short(task.due_date) }}{% endif %}{{ lockMark(task) }}
           </td>
           <td class="nowrap muted"><time datetime="{{ fmt.iso(task.updated_at) }}" title="{{ fmt.dateTime(task.updated_at) }}">{{ fmt.ago(task.updated_at) }}</time></td>
         </tr>
