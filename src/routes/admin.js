@@ -6,12 +6,14 @@ import { translator } from '../i18n.js';
 import { composeEmail, mailEnabled, sendNow } from '../mail.js';
 import { enforce } from '../ratelimit.js';
 import { MAX_IMPORT_BYTES, uploadThenCsrf } from '../uploads.js';
-import { FIELDS, buildPreview, getJob, guessMapping, parseSheet, readMapping, runImport, saveJob } from '../services/import.js';
+import {
+  FIELDS, MAX_NEW_PEOPLE, buildPreview, getJob, guessMapping, parseSheet, readMapping, runImport, saveJob,
+} from '../services/import.js';
 import { HttpError } from '../services/tasks.js';
 import {
   activePeople, addPerson, changeRole, createInvite, createReset, peopleOverview, renamePerson, revokeInvite, setStatus,
 } from '../services/users.js';
-import { cleanLine, idParam, inviteSchema, labelSchema, parse, personSchema, uuidParam } from '../validation.js';
+import { cleanLine, idParam, inviteSchema, labelSchema, nameField, parse, personSchema, uuidParam } from '../validation.js';
 
 const AUDIT_PAGE = 100;
 
@@ -348,14 +350,37 @@ export default function adminRoutes(config) {
     res.render('import/review.njk', { job, mapping, fields: FIELDS, preview, samples, rowCount: job.rows.length });
   });
 
+  // Ticked names from the review page, each checked against this preview's unmatched names.
+  function readAdditions(body, preview) {
+    const allowed = new Map(preview.unmatchedNames.map((u) => [u.text.toLowerCase(), u.text]));
+    const additions = [];
+    for (let i = 0; i < MAX_NEW_PEOPLE; i += 1) {
+      if (body[`newp_on_${i}`] !== '1') continue;
+      const from = allowed.get(cleanLine(body[`newp_from_${i}`]).toLowerCase());
+      if (!from) continue;
+      const name = parse(nameField, body[`newp_name_${i}`]);
+      if (name.errors) return null;
+      additions.push({ from, name: name.data });
+    }
+    return additions;
+  }
+
   r.post('/import/:id/run', requireAuth, requireAdmin, async (req, res) => {
     const job = await jobOr404(req);
     const mapping = readMapping(req.body, job.headers);
     if (mapping.title === undefined) throw new HttpError(400, 'title column required');
     const people = await activePeople();
     const preview = await buildPreview(job, mapping, people);
-    const count = await runImport(job, preview, req.user, req.ip, translator(req.lang));
-    flash(req, req.t('import.done', { n: count, skipped: preview.rows.length - count }));
+    const additions = readAdditions(req.body, preview);
+    if (!additions) {
+      flash(req, req.t('import.newPeople.badName'), 'warn');
+      const back = new URLSearchParams({ mapped: '1' });
+      for (const [field, index] of Object.entries(mapping)) back.set(`map_${field}`, String(index));
+      return res.redirect(`/import/${job.id}?${back}`);
+    }
+    const count = await runImport(job, preview, req.user, req.ip, translator(req.lang), additions);
+    const added = additions.length ? ` ${req.t('import.newPeople.done', { n: additions.length })}` : '';
+    flash(req, req.t('import.done', { n: count, skipped: preview.rows.length - count }) + added);
     res.redirect('/tasks');
   });
 

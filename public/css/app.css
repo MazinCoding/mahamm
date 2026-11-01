@@ -418,3 +418,10 @@ input[type='file']::file-selector-button:hover { background: var(--column); }
 .mini-form .input { flex: 1 1 180px; min-width: 0; }
 .mini-form select.input { flex: 0 0 auto; }
 .mini-form .hint { flex-basis: 100%; margin: 0; }
+
+/* Import: unmatched names that can be added as people */
+.new-people { border: 1px solid var(--border); max-width: none; }
+.new-people legend { padding: 0 4px; }
+.new-people-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px 16px; }
+.new-person { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.new-person:has(input[type=checkbox]:checked) { border-color: var(--accent); background: #f2f8f7; }
