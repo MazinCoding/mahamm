@@ -45,11 +45,27 @@ jobs:
         run: |
           npm test 2>&1 | tee test-output.txt
           exit ${PIPESTATUS[0]}
+      - name: Screenshots of the running app
+        if: success()
+        shell: bash
+        env:
+          NODE_ENV: development
+          PORT: "3000"
+          APP_URL: http://localhost:3000
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/mahamm_demo
+        run: |
+          export SESSION_SECRET="$(openssl rand -hex 32)" DATA_ENCRYPTION_KEY="$(openssl rand -hex 32)" DEMO_PASSWORD="$(openssl rand -hex 16)"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE mahamm_demo'
+          npx playwright install --with-deps chromium > /dev/null
+          node scripts/migrate.js
+          node scripts/seed-demo.js
+          mkdir -p /tmp/results/screens
+          node scripts/screenshots.js /tmp/results/screens
       - name: Dependency audit (fails on high or critical)
         if: always()
         shell: bash
         run: |
-          npm audit --omit=dev 2>&1 | tee audit-output.txt
+          npm audit --omit=dev 2>&1 | tee audit-output.txt || true
           npm audit --omit=dev --audit-level=high > /dev/null
       - name: Scan the full git history for secrets
         if: always()

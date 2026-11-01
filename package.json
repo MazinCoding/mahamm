@@ -15,7 +15,8 @@
     "start:render": "node scripts/migrate.js && node src/server.js",
     "dev": "node --env-file=.env --watch src/server.js",
     "test": "node --test --test-concurrency=1 test/*.test.js",
-    "audit:deps": "npm audit --omit=dev --audit-level=high"
+    "audit:deps": "npm audit --omit=dev --audit-level=high",
+    "seed:demo": "node scripts/seed-demo.js"
   },
   "dependencies": {
     "@fontsource/ibm-plex-sans": "^5.2.5",
@@ -40,7 +41,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "supertest": "^7.1.1"
+    "supertest": "^7.1.1",
+    "playwright": "1.63.0"
   },
   "overrides": {
     "exceljs": {
