@@ -9,7 +9,7 @@ An invite-only task board with a complete audit trail, built to replace a shared
 - **English and Arabic**, with a right-to-left layout.
 - **Attachments**, comments with @mentions, in-app notifications and optional email.
 - **Excel/CSV import** with column matching and a preview that marks missing values instead of guessing.
-- **Security**: invite-only accounts, Argon2id passwords, two-step verification (required for admins), CSRF protection, strict CSP, rate limits. See `SECURITY-AUDIT.md`.
+- **Security**: invite-only accounts, Argon2id passwords, two-step verification (required for admins), CSRF protection, strict CSP, rate limits.
 
 Stack: Node.js 22, Express 5, server-rendered Nunjucks templates, PostgreSQL. No front-end build step.
 
@@ -68,7 +68,7 @@ Tests need a Postgres database they can wipe: `TEST_DATABASE_URL=postgres://… 
 
 For a demo with sample people and tasks, run `DEMO_PASSWORD=<12+ chars> npm run seed:demo` against an **empty development** database (it refuses to run in production). Accounts are `ahmed@example.com`, `fatma@example.com` and so on.
 
-GitHub Actions runs the tests, a browser walk-through with screenshots, `npm audit` and a full-history secret scan on every push; results are kept as a downloadable artifact for 14 days. See `SECURITY-AUDIT.md` for the security review.
+GitHub Actions runs the tests, a browser walk-through with screenshots, `npm audit` and a full-history secret scan on every push; results are kept as a downloadable artifact for 14 days.
 
 ## Backups
 

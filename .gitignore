@@ -29,3 +29,6 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 screens/
+
+# Private notes (keep out of the public repo)
+SECURITY-AUDIT.md
