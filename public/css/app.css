@@ -245,7 +245,11 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .ribbon-buttons .input { width: auto; max-width: 200px; }
 .ribbon-status { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
 .ribbon-status.is-warn { color: var(--warn); }
-.rb { min-height: 30px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.rb { min-height: 30px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+/* Plain colours have no weight, so a ribbon button for a status, priority or label wears the same colours as its chip in the rows. */
+:where(.rb) { background: var(--surface); color: var(--text); }
+.rb.s-backlog { background: #eef1f4; color: #3d4752; }
+.rb:is(.s-backlog, .s-todo, .s-progress, .s-review, .s-done, .prio-high, .prio-med, .prio-low, [class*=" c-"]) { border-color: rgba(27, 31, 36, .14); }
 .rb:hover { border-color: #8c959f; }
 .rb.prio-high, .rb.prio-med, .rb.prio-low { font-size: 12px; font-weight: 600; padding: 0 10px; }
 .rb[aria-pressed='true'], .rb.is-armed { outline: 2px solid var(--accent); outline-offset: 1px; }
