@@ -3,17 +3,18 @@ import { describe } from '../audit.js';
 import { requireAuth } from '../auth.js';
 import { q } from '../db.js';
 import { limiter } from '../ratelimit.js';
+import { safeLocalPath } from '../security.js';
 import { MAX_ATTACHMENT_BYTES, checkAttachment, uploadThenCsrf } from '../uploads.js';
 import {
   HttpError, OPEN_STATUSES, PAGE_SIZE, PRIORITIES, TABLE_DUE, TABLE_SORTS, addAttachment, addComment, boardStats, boardTasks,
-  canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, listTasks, moveTask, removeAttachment,
+  bulkApply, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, listTasks, moveTask, removeAttachment,
   reopenTask, resolveFlag, tableTasks, taskDetail, updateTask,
 } from '../services/tasks.js';
 
 const TABLE_COLORS = ['status', 'priority', 'label', 'none'];
 import { activePeople, allPeopleNames } from '../services/users.js';
 import {
-  closeSchema, commentSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
+  bulkSchema, closeSchema, commentSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
 } from '../validation.js';
 
 async function allLabels() {
@@ -107,9 +108,10 @@ export default function taskRoutes(config) {
       color: pick(req.query.color, TABLE_COLORS) || 'status',
       page: Math.min(idParam(req.query.page) || 1, 10000),
     };
-    const [{ rows, total }, labels, people] = await Promise.all([
-      tableTasks({ ...filters, timezone: config.timezone }), allLabels(), allPeopleNames(),
+    const [{ rows, total }, labels, people, assignable] = await Promise.all([
+      tableTasks({ ...filters, timezone: config.timezone }), allLabels(), allPeopleNames(), activePeople(),
     ]);
+    for (const row of rows) row.editable = !row.closed_at && canEdit(req.user, row);
     const query = (extra = {}) => {
       const m = { ...filters, ...extra };
       const p = new URLSearchParams();
@@ -128,7 +130,7 @@ export default function taskRoutes(config) {
       return [key, { url: query({ sort: key, dir: next, page: 1 }), current }];
     }));
     res.render('table.njk', {
-      rows, total, labels, people, filters, sortLinks,
+      rows, total, labels, people, assignable, filters, sortLinks,
       today: new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(new Date()),
       pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
       prevUrl: filters.page > 1 ? query({ page: filters.page - 1 }) : null,
@@ -136,6 +138,33 @@ export default function taskRoutes(config) {
       clearUrl: query({ q: '', status: null, label: null, person: null, priority: null, due: null, flagged: false, page: 1 }),
       hasFilters: !!(filters.q || filters.status || filters.label || filters.person || filters.priority || filters.due || filters.flagged),
     });
+  });
+
+  // Table ribbon: one value applied to the selected rows. JSON from the page script,
+  // or a normal form post (with a redirect back) when JavaScript is off.
+  r.post('/tasks/bulk', requireAuth, writeLimit, async (req, res) => {
+    const json = req.is('application/json');
+    const backPath = safeLocalPath(req.body.back, '/table');
+    const back = /^\/table(\?|$)/.test(backPath) ? backPath : '/table';
+    const refuse = (key) => {
+      if (json) return res.status(400).json({ ok: false, message: req.t(key) });
+      flash(req, req.t(key), 'warn');
+      return res.redirect(back);
+    };
+    const result = parse(bulkSchema, req.body);
+    if (result.errors) return refuse(result.errors.ids ? 'table.selectFirst' : 'table.invalid');
+    const { ids, op, value } = result.data;
+    let outcome;
+    try {
+      outcome = await bulkApply(ids, { op, value }, req.user, req.ip);
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 400) return refuse('table.invalid');
+      throw err;
+    }
+    const text = await bulkMessage(req, op, value, outcome);
+    flash(req, text, outcome.updated.length ? 'ok' : 'warn');
+    if (json) return res.json({ ok: true, updated: outcome.updated, skipped: outcome.skipped });
+    return res.redirect(back);
   });
 
   r.get('/tasks/new', requireAuth, async (req, res) => {
@@ -364,6 +393,27 @@ export default function taskRoutes(config) {
   });
 
   return r;
+}
+
+// "Tasks updated: 3. Bug added. Skipped (you can't edit them): #12, #15."
+async function bulkMessage(req, op, value, { updated, skipped, toggled }) {
+  const t = req.t;
+  const list = (ids) => ids.map((id) => `#${id}`).join(t('common.listSep'));
+  const parts = [updated.length ? t('table.result.updated', { n: updated.length }) : t('table.result.none')];
+  if (updated.length && toggled) {
+    let name = '';
+    if (op === 'label') {
+      const label = (await allLabels()).find((l) => l.id === Number(value));
+      name = label ? (req.lang === 'ar' ? label.name_ar : label.name_en) : '';
+    } else {
+      name = (await allPeopleNames()).find((p) => p.id === value)?.name || '';
+    }
+    parts.push(t(`table.result.${op}.${toggled}`, { name }));
+  }
+  if (skipped.locked.length) parts.push(t('table.result.locked', { list: list(skipped.locked) }));
+  if (skipped.closed.length) parts.push(t('table.result.closed', { list: list(skipped.closed) }));
+  if (skipped.missing.length) parts.push(t('table.result.missing', { list: list(skipped.missing) }));
+  return parts.join(' ');
 }
 
 function formValues(body) {

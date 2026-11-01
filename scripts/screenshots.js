@@ -138,6 +138,34 @@ await step('table-colour', async () => {
   await page.selectOption('[data-color-by-select]', 'status');
 });
 
+// Table ribbon: select a range, apply a value, open a cell menu, paint with the brush.
+await step('table-ribbon', async () => {
+  await page.goto(`${base}/table?sort=id&dir=asc`);
+  const rows = page.locator('.sheet tbody tr');
+  await rows.nth(0).locator('.col-task .num').click();
+  await rows.nth(2).locator('.col-task .num').click({ modifiers: ['Shift'] });
+  note(`check: rows selected after shift-click = ${await page.locator('.row-check:checked').count()}`);
+  await shot(page, '06e-table-selected');
+  const picked = await page.locator('.row-check:checked').evaluateAll((boxes) => boxes.map((b) => b.value));
+  await Promise.all([page.waitForEvent('load'), page.click('button[name="apply"][value="priority:high"]')]);
+  const prios = [];
+  for (const id of picked) prios.push((await page.locator(`tr[data-task-id="${id}"] [data-field="priority"]`).innerText()).trim());
+  note(`check: priority after ribbon = ${prios.join(', ')}; message = ${(await page.locator('.flash').innerText()).trim()}`);
+  note(`check: rows still selected after saving = ${await page.locator('.row-check:checked').count()}`);
+  await rows.nth(1).locator('[data-field="status"]').click();
+  await page.waitForSelector('.cell-menu');
+  await shot(page, '06f-table-cell-menu');
+  await page.keyboard.press('Escape');
+  await page.click('[data-brush]');
+  await page.click('button[name="apply"][value="priority:low"]');
+  const target = await rows.nth(3).getAttribute('data-task-id');
+  await Promise.all([page.waitForEvent('load'), rows.nth(3).locator('.col-task .num').click()]);
+  note(`check: brush set #${target} priority to ${(await page.locator(`tr[data-task-id="${target}"] [data-field="priority"]`).innerText()).trim()}; brush still on = ${await page.getAttribute('[data-brush]', 'aria-pressed')}`);
+  await shot(page, '06g-table-brush');
+  await page.keyboard.press('Escape');
+  note(`check: Esc turns the brush off = ${await page.getAttribute('[data-brush]', 'aria-pressed')}`);
+});
+
 // Excel import: upload a sheet with gaps and an unknown name.
 const wb = new ExcelJS.Workbook();
 const ws = wb.addWorksheet('Requests');

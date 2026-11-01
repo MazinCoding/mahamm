@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { audit } from '../audit.js';
-import { notify } from '../notify.js';
+import { notify, notifyBatch } from '../notify.js';
 import { one, q, tx } from '../db.js';
 
 export const OPEN_STATUSES = ['backlog', 'todo', 'progress', 'review'];
@@ -303,6 +303,106 @@ export async function moveTask(id, to, actor, ip) {
     await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from, to }, ip });
     if (to === 'review') await notify(db, { kind: 'review', taskId: id, task, actor, userIds: [task.creator_id] });
     return { changed: true };
+  });
+}
+
+// Table ribbon: apply one value to many tasks in one transaction.
+// Status is open to everyone (as on the board); other fields need edit rights.
+// Closed tasks are skipped. Every changed task gets its own audit entry, and all
+// entries from one action share a batch id.
+export const BULK_OPS = ['status', 'priority', 'label', 'assignee', 'due'];
+
+export async function bulkApply(ids, { op, value }, actor, ip) {
+  if (!BULK_OPS.includes(op)) throw new HttpError(400, 'bad op');
+  const batch = randomUUID();
+  return tx(async (db) => {
+    const { rows: found } = await db.query(
+      `SELECT t.id, t.title, t.status, t.priority, t.due_date, t.creator_id, t.closed_at,
+              COALESCE((SELECT array_agg(ta.user_id::text) FROM task_assignees ta WHERE ta.task_id = t.id), '{}') AS assignee_ids,
+              COALESCE((SELECT array_agg(tl.label_id) FROM task_labels tl WHERE tl.task_id = t.id), '{}') AS label_ids
+       FROM tasks t WHERE t.id = ANY($1::int[]) ORDER BY t.id FOR UPDATE OF t`,
+      [ids],
+    );
+    const foundIds = new Set(found.map((t) => t.id));
+    const skipped = { missing: ids.filter((id) => !foundIds.has(id)), closed: [], locked: [] };
+    const tasks = [];
+    for (const t of found) {
+      if (t.closed_at) skipped.closed.push(t.id);
+      else if (op !== 'status' && !canEdit(actor, { creator_id: t.creator_id, assignees: t.assignee_ids.map((id) => ({ id })) })) skipped.locked.push(t.id);
+      else tasks.push(t);
+    }
+    const updated = [];
+    const touch = (id) => db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [id]);
+    const edited = async (t, changes) => {
+      await audit(db, { actorId: actor.id, action: 'task.edited', taskId: t.id, details: { changes, batch }, ip });
+      updated.push(t.id);
+    };
+    let toggled = null;
+
+    if (op === 'status') {
+      const review = [];
+      for (const t of tasks) {
+        if (t.status === value) continue;
+        await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [t.id, value]);
+        await audit(db, { actorId: actor.id, action: 'task.moved', taskId: t.id, details: { from: t.status, to: value, batch }, ip });
+        updated.push(t.id);
+        if (value === 'review') review.push({ task: t, userIds: [t.creator_id] });
+      }
+      await notifyBatch(db, { kind: 'review', actor, items: review });
+    }
+
+    if (op === 'priority') {
+      for (const t of tasks) {
+        if (t.priority === value) continue;
+        await db.query('UPDATE tasks SET priority = $2, updated_at = now() WHERE id = $1', [t.id, value]);
+        await edited(t, { priority: { from: t.priority, to: value } });
+      }
+    }
+
+    if (op === 'due') {
+      const to = value || null;
+      for (const t of tasks) {
+        if ((t.due_date || null) === to) continue;
+        await db.query('UPDATE tasks SET due_date = $2, updated_at = now() WHERE id = $1', [t.id, to]);
+        await edited(t, { due_date: { from: t.due_date || null, to } });
+      }
+    }
+
+    // Labels and people toggle: if every task already has it, it's removed; otherwise added where missing.
+    if (op === 'label') {
+      const labelId = Number(value);
+      if ((await existingLabelIds(db, [labelId])).length === 0) throw new HttpError(400, 'bad label');
+      const removing = tasks.length > 0 && tasks.every((t) => t.label_ids.includes(labelId));
+      toggled = removing ? 'removed' : 'added';
+      for (const t of tasks) {
+        const has = t.label_ids.includes(labelId);
+        if (removing) await db.query('DELETE FROM task_labels WHERE task_id = $1 AND label_id = $2', [t.id, labelId]);
+        else if (!has) await db.query('INSERT INTO task_labels (task_id, label_id) VALUES ($1, $2)', [t.id, labelId]);
+        else continue;
+        await touch(t.id);
+        await edited(t, { labels: removing ? { added: [], removed: [labelId] } : { added: [labelId], removed: [] } });
+      }
+    }
+
+    if (op === 'assignee') {
+      const removing = tasks.length > 0 && tasks.every((t) => t.assignee_ids.includes(value));
+      // New assignments need an active account; removing someone always works.
+      if (!removing && (await activeIds(db, [value])).length === 0) throw new HttpError(400, 'person not active');
+      toggled = removing ? 'removed' : 'added';
+      const assigned = [];
+      for (const t of tasks) {
+        const has = t.assignee_ids.includes(value);
+        if (removing) await db.query('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = $2', [t.id, value]);
+        else if (!has) await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2)', [t.id, value]);
+        else continue;
+        await touch(t.id);
+        await edited(t, { assignees: removing ? { added: [], removed: [value] } : { added: [value], removed: [] } });
+        if (!removing) assigned.push({ task: t, userIds: [value] });
+      }
+      await notifyBatch(db, { kind: 'assigned', actor, items: assigned });
+    }
+
+    return { batch, updated, skipped, toggled };
   });
 }
 

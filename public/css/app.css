@@ -237,6 +237,31 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
   .sheet-wrap { max-height: calc(100vh - 250px); }
 }
 
+/* Table ribbon, selection, brush and cell menus */
+.ribbon { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 18px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.ribbon-group { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ribbon-label { font-size: 11px; font-weight: 600; color: var(--muted); }
+.ribbon-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.ribbon-buttons .input { width: auto; max-width: 200px; }
+.ribbon-status { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+.ribbon-status.is-warn { color: var(--warn); }
+.rb { min-height: 30px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.rb:hover { border-color: #8c959f; }
+.rb.prio-high, .rb.prio-med, .rb.prio-low { font-size: 12px; font-weight: 600; padding: 0 10px; }
+.rb[aria-pressed='true'], .rb.is-armed { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row-check { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); flex: none; align-self: center; cursor: pointer; }
+.sheet-wrap .sheet tbody tr.is-selected > * { background: #e3f0ee; }
+.sheet tbody tr.is-selected > .col-task { box-shadow: inset 3px 0 0 var(--accent); }
+[dir='rtl'] .sheet tbody tr.is-selected > .col-task { box-shadow: inset -3px 0 0 var(--accent); }
+.sheet [data-field] { cursor: pointer; }
+.sheet tr.is-closed [data-field], .sheet [data-locked] { cursor: default; }
+.sheet.is-brushing tbody tr, .sheet.is-brushing [data-field] { cursor: copy; }
+.lock { display: inline-flex; margin-inline-start: 6px; color: var(--muted); vertical-align: middle; visibility: hidden; }
+.sheet tr:hover .lock, .sheet tr.is-selected .lock { visibility: visible; }
+.cell-menu { position: absolute; z-index: 20; min-width: 200px; max-width: min(340px, calc(100vw - 32px)); padding: 10px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 10px; box-shadow: 0 8px 24px rgba(27, 31, 36, .14); }
+.cell-menu .ribbon-buttons { gap: 6px; }
+.cell-menu-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
+
 /* Task page */
 .task-head { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px; }
 .task-head h1 { font-size: 26px; font-weight: 500; overflow-wrap: anywhere; }

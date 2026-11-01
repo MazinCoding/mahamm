@@ -160,7 +160,42 @@
     },
     "noLabels": "No labels",
     "unassigned": "Unassigned",
-    "noDue": "No due date"
+    "noDue": "No due date",
+    "labelsToggle": "Labels (add or remove)",
+    "assignToggle": "Assign or unassign",
+    "setDue": "Set date",
+    "clearDue": "Clear date",
+    "brush": "Brush",
+    "selectHintNoJs": "Tick the rows to change, then choose a value.",
+    "selectHint": "Select rows (Shift-click for a range, Ctrl or ⌘-click to add one), then choose a value. Click a cell to change just that task.",
+    "selected": "Selected: {n}",
+    "selectFirst": "Select one or more rows first.",
+    "selectRow": "Select {n}",
+    "failed": "That change wasn’t saved. Reload the page and try again.",
+    "invalid": "That change wasn’t valid, so nothing was saved.",
+    "locked": "You can’t change this field on {n}. Only its creator, its assignees or an admin can.",
+    "closedRow": "{n} is closed. Reopen it from its page to change it.",
+    "brushOn": "Brush on: {v}. Click rows to apply it. Press Esc to stop.",
+    "brushPick": "Brush is on. Choose a value above, then click rows.",
+    "lockSr": "You can’t edit this",
+    "result": {
+      "updated": "Tasks updated: {n}.",
+      "none": "Nothing needed changing.",
+      "locked": "Skipped because you can’t edit them: {list}.",
+      "closed": "Skipped because they’re closed: {list}.",
+      "missing": "Skipped because they no longer exist: {list}.",
+      "label": {
+        "added": "Label added: {name}.",
+        "removed": "Label removed: {name}."
+      },
+      "assignee": {
+        "added": "Assigned: {name}.",
+        "removed": "Unassigned: {name}."
+      }
+    },
+    "selection": "Selection",
+    "selectAll": "Select all on this page",
+    "selectNone": "Clear selection"
   },
   "task": {
     "new": "New task",
@@ -355,7 +390,10 @@
     "flagged": "{actor} flagged {n} as having a problem",
     "mentioned": "{actor} mentioned you in {n}",
     "credited": "{actor} credited you for completing {n}",
-    "commented": "{actor} commented on {n}"
+    "commented": "{actor} commented on {n}",
+    "assignedMany": "{actor} assigned you to {count} tasks",
+    "reviewMany": "{actor} moved {count} tasks to Review and asked you to check them",
+    "andMore": "…and {count} more"
   },
   "notifications": {
     "title": "Notifications",
@@ -638,7 +676,8 @@
     "inviteHeading": "You’re invited to {app}",
     "inviteBody": "{who} invited you to join the team’s task board as a {role}.",
     "inviteButton": "Set up your account",
-    "inviteFooter": "The link works once and expires in 72 hours."
+    "inviteFooter": "The link works once and expires in 72 hours.",
+    "openTable": "Open the table"
   },
   "errors": {
     "badRequest": "Something in that request wasn’t right.",
