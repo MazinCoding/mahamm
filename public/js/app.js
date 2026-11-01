@@ -85,6 +85,35 @@
     });
   });
 
+  // Table: row colouring switches instantly and is remembered in this browser.
+  // A colour named in the URL (a shared link, or the form without JavaScript) wins.
+  var colorSelect = document.querySelector('[data-color-by-select]');
+  if (colorSelect) {
+    var sheet = document.querySelector('[data-sheet]');
+    var KEY = 'mahamm.table.color';
+    var allowed = ['status', 'priority', 'label', 'none'];
+    var applyColor = function (value) {
+      if (allowed.indexOf(value) < 0) return;
+      colorSelect.value = value;
+      if (sheet) sheet.setAttribute('data-color-by', value);
+    };
+    var remember = function (value) {
+      try { window.localStorage.setItem(KEY, value); } catch (e) { /* storage blocked: colour still works for this page */ }
+    };
+    var fromUrl = new URLSearchParams(window.location.search).get('color');
+    if (fromUrl) {
+      if (allowed.indexOf(fromUrl) >= 0) remember(fromUrl);
+    } else {
+      var saved = null;
+      try { saved = window.localStorage.getItem(KEY); } catch (e) { saved = null; }
+      if (saved) applyColor(saved);
+    }
+    colorSelect.addEventListener('change', function () {
+      applyColor(colorSelect.value);
+      remember(colorSelect.value);
+    });
+  }
+
   // Close form: show "who did it" only for Completed, "duplicate of" only for Duplicate.
   var closeForm = document.querySelector('[data-close-form]');
   if (closeForm) {

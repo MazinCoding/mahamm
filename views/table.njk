@@ -1,0 +1,128 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('table.title') }}{% endblock %}
+
+{% block content %}
+{% macro sortHead(s, label, cls='') %}
+<th scope="col" class="{{ cls }}"{% if s.current %} aria-sort="{{ 'ascending' if s.current == 'asc' else 'descending' }}"{% endif %}>
+  <a class="sort-link" href="{{ s.url }}">{{ label }}<span class="sort-mark" aria-hidden="true">{% if s.current == 'asc' %}▲{% elif s.current == 'desc' %}▼{% endif %}</span></a>
+</th>
+{%- endmacro %}
+<div class="page-head">
+  <div>
+    <h1>{{ t('table.title') }}</h1>
+    <p class="sub">{{ t('table.sub') }}</p>
+  </div>
+  <div class="head-actions"><a class="btn btn-primary" href="/tasks/new">{{ t('task.new') }}</a></div>
+</div>
+
+<div class="box">
+  <form class="toolbar" method="get" action="/table" role="search">
+    {% if filters.sort %}<input type="hidden" name="sort" value="{{ filters.sort }}">{% endif %}
+    {% if filters.dir %}<input type="hidden" name="dir" value="{{ filters.dir }}">{% endif %}
+    <label class="sr-only" for="t-q">{{ t('list.search') }}</label>
+    <input id="t-q" class="input" type="search" name="q" value="{{ filters.q }}" placeholder="{{ t('list.searchPh') }}" maxlength="100">
+    <label class="sr-only" for="t-status">{{ t('field.status') }}</label>
+    <select id="t-status" class="input" name="status" data-autosubmit>
+      <option value="">{{ t('table.anyStatus') }}</option>
+      {% for s in ['backlog', 'todo', 'progress', 'review'] %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ t('status.' + s) }}</option>{% endfor %}
+      {% if filters.closed %}<option value="done" {% if filters.status == 'done' %}selected{% endif %}>{{ t('table.recentlyClosed') }}</option>{% endif %}
+    </select>
+    <label class="sr-only" for="t-label">{{ t('field.labels') }}</label>
+    <select id="t-label" class="input" name="label" data-autosubmit>
+      <option value="">{{ t('list.allLabels') }}</option>
+      {% for l in labels %}<option value="{{ l.id }}" {% if filters.label == l.id %}selected{% endif %}>{{ labelName(l) }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="t-person">{{ t('list.person') }}</label>
+    <select id="t-person" class="input" name="person" data-autosubmit>
+      <option value="">{{ t('list.anyone') }}</option>
+      {% for p in people %}<option value="{{ p.id }}" {% if filters.person == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="t-prio">{{ t('field.priority') }}</label>
+    <select id="t-prio" class="input" name="priority" data-autosubmit>
+      <option value="">{{ t('list.anyPriority') }}</option>
+      {% for p in ['high', 'med', 'low'] %}<option value="{{ p }}" {% if filters.priority == p %}selected{% endif %}>{{ t('priority.' + p) }}</option>{% endfor %}
+    </select>
+    <label class="sr-only" for="t-due">{{ t('field.due') }}</label>
+    <select id="t-due" class="input" name="due" data-autosubmit>
+      <option value="">{{ t('table.anyDue') }}</option>
+      {% for d in ['overdue', 'week', 'none'] %}<option value="{{ d }}" {% if filters.due == d %}selected{% endif %}>{{ t('table.due.' + d) }}</option>{% endfor %}
+    </select>
+    <label class="check-inline"><input type="checkbox" name="flagged" value="1" data-autosubmit {% if filters.flagged %}checked{% endif %}> {{ t('list.flaggedOnly') }}</label>
+    <button class="btn btn-secondary btn-sm" type="submit">{{ t('list.apply') }}</button>
+    {% if hasFilters %}<a class="link-sm" href="{{ clearUrl }}">{{ t('list.clear') }}</a>{% endif %}
+    <span class="grow"></span>
+    <span class="view-opts">
+      <label class="check-inline"><input type="checkbox" name="closed" value="1" data-autosubmit {% if filters.closed %}checked{% endif %}> {{ t('table.showClosed') }}</label>
+      <label class="check-inline" for="t-color">{{ t('table.colorBy') }}</label>
+      <select id="t-color" class="input" name="color" data-color-by-select>
+        {% for c in ['status', 'priority', 'label', 'none'] %}<option value="{{ c }}" {% if filters.color == c %}selected{% endif %}>{{ t('table.color.' + c) }}</option>{% endfor %}
+      </select>
+    </span>
+  </form>
+
+  <p class="sheet-count">{{ t('table.count', { n: total }) }}</p>
+
+  {% if rows.length %}
+  <div class="sheet-wrap" data-sheet data-color-by="{{ filters.color }}">
+    <table class="sheet">
+      <caption class="sr-only">{{ t('table.caption') }}</caption>
+      <thead>
+        <tr>
+          {{ sortHead(sortLinks.id, t('table.task'), 'col-task') }}
+          {{ sortHead(sortLinks.status, t('field.status')) }}
+          {{ sortHead(sortLinks.priority, t('field.priority')) }}
+          <th scope="col">{{ t('field.labels') }}</th>
+          <th scope="col">{{ t('field.assignees') }}</th>
+          {{ sortHead(sortLinks.due, t('field.due')) }}
+          {{ sortHead(sortLinks.updated, t('table.updated')) }}
+        </tr>
+      </thead>
+      <tbody>
+        {% for task in rows %}
+        <tr class="st-{{ 'closed' if task.closed_at else task.status }} pr-{{ task.priority }} lc-{{ task.labels[0].color if task.labels.length else 'none' }}{% if task.closed_at %} is-closed{% endif %}" data-task-id="{{ task.id }}">
+          <th scope="row" class="col-task">
+            <span class="cell-task">
+              <span class="num">{% if task.closed_at %}{{ m.stateIcon(task) }}{% endif %}#{{ task.id }}</span>
+              <a class="cell-title" dir="auto" href="/tasks/{{ task.id }}">{{ task.title }}</a>
+              {% if task.open_flags %}<span class="chip c-red">{{ t('flag.flagged') }}</span>{% endif %}
+            </span>
+          </th>
+          <td>
+            {% if task.closed_at %}
+              <span class="status-chip {{ 's-done' if task.close_reason == 'completed' else 's-closed' }}">{{ t('status.done') if task.close_reason == 'completed' else t('state.closedReason', { reason: t('reason.' + task.close_reason) }) }}</span>
+              <span class="cell-note">{{ m.closedLine(task) }}</span>
+            {% else %}
+              <span class="status-chip s-{{ task.status }}">{{ t('status.' + task.status) }}</span>
+            {% endif %}
+          </td>
+          <td>{{ m.prio(task.priority) }}</td>
+          <td>{% if task.labels.length %}<span class="chips">{% for l in task.labels %}{{ m.label(l) }}{% endfor %}</span>{% else %}<span class="missing">{{ t('table.noLabels') }}</span>{% endif %}</td>
+          <td>{% if task.assignees.length %}<span class="people-cell">{% for p in task.assignees %}<span class="person"><span class="av {{ avatarClass(p.id) }}" aria-hidden="true">{{ initials(p.name) }}</span><bdi>{{ p.name }}</bdi></span>{% endfor %}</span>{% else %}<span class="missing">{{ t('table.unassigned') }}</span>{% endif %}</td>
+          <td class="nowrap">
+            {% if not task.due_date %}<span class="missing">{{ t('table.noDue') }}</span>
+            {% elif not task.closed_at and task.due_date < today %}<span class="due is-overdue">{{ t('task.overdue', { d: fmt.short(task.due_date) }) }}</span>
+            {% else %}{{ fmt.short(task.due_date) }}{% endif %}
+          </td>
+          <td class="nowrap muted"><time datetime="{{ fmt.iso(task.updated_at) }}" title="{{ fmt.dateTime(task.updated_at) }}">{{ fmt.ago(task.updated_at) }}</time></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty">
+    <p>{{ t('list.empty') }}</p>
+    {% if hasFilters %}<a class="link-sm" href="{{ clearUrl }}">{{ t('list.clear') }}</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+{% if prevUrl or nextUrl %}
+<nav class="pager" aria-label="{{ t('list.pages') }}">
+  {% if prevUrl %}<a class="btn btn-secondary btn-sm" href="{{ prevUrl }}">{{ t('list.prev') }}</a>{% endif %}
+  <span>{{ t('list.pageOf', { page: filters.page, pages: pages }) }}</span>
+  {% if nextUrl %}<a class="btn btn-secondary btn-sm" href="{{ nextUrl }}">{{ t('list.next') }}</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}

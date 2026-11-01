@@ -67,13 +67,9 @@ export async function boardStats(wipLimit, timezone) {
 
 export const PAGE_SIZE = 50;
 
-export async function listTasks({ state = 'open', q: search = '', label = null, person = null, priority = null, flagged = false, page = 1 }) {
+// Filters shared by the list and the table. Values always go in as parameters.
+function filterClauses({ q: search = '', label = null, person = null, priority = null, flagged = false }, add) {
   const where = [];
-  const params = [];
-  const add = (v) => {
-    params.push(v);
-    return `$${params.length}`;
-  };
   if (label) where.push(`EXISTS (SELECT 1 FROM task_labels tl WHERE tl.task_id = t.id AND tl.label_id = ${add(label)})`);
   if (priority) where.push(`t.priority = ${add(priority)}`);
   if (person) {
@@ -87,6 +83,21 @@ export async function listTasks({ state = 'open', q: search = '', label = null, 
     if (/^\d{1,9}$/.test(term)) where.push(`(t.id = ${add(Number(term))} OR t.title ILIKE ${add(`%${escapeLike(term)}%`)})`);
     else where.push(`t.title ILIKE ${add(`%${escapeLike(term)}%`)}`);
   }
+  return where;
+}
+
+function paramList() {
+  const params = [];
+  const add = (v) => {
+    params.push(v);
+    return `$${params.length}`;
+  };
+  return { params, add };
+}
+
+export async function listTasks({ state = 'open', q: search = '', label = null, person = null, priority = null, flagged = false, page = 1 }) {
+  const { params, add } = paramList();
+  const where = filterClauses({ q: search, label, person, priority, flagged }, add);
   const base = where.length ? `AND ${where.join(' AND ')}` : '';
   const counts = await one(
     `SELECT count(*) FILTER (WHERE t.closed_at IS NULL)::int AS open, count(*) FILTER (WHERE t.closed_at IS NOT NULL)::int AS closed
@@ -106,6 +117,57 @@ export async function listTasks({ state = 'open', q: search = '', label = null, 
 
 function escapeLike(s) {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
+}
+
+// Table view. Sort keys map to fixed SQL; nothing from the request is interpolated.
+export const TABLE_SORTS = {
+  id: { sql: 't.id', dir: 'desc' },
+  title: { sql: 'lower(t.title)', dir: 'asc' },
+  status: { sql: `CASE t.status WHEN 'backlog' THEN 0 WHEN 'todo' THEN 1 WHEN 'progress' THEN 2 ELSE 3 END`, dir: 'asc' },
+  priority: { sql: `CASE t.priority WHEN 'high' THEN 0 WHEN 'med' THEN 1 ELSE 2 END`, dir: 'asc' },
+  due: { sql: 't.due_date', dir: 'asc' },
+  updated: { sql: 't.updated_at', dir: 'desc' },
+};
+export const TABLE_DUE = ['overdue', 'week', 'none'];
+export const RECENTLY_CLOSED_DAYS = 14;
+
+export async function tableTasks({
+  q: search = '', status = null, label = null, person = null, priority = null, due = null, flagged = false,
+  closed = false, sort = null, dir = null, page = 1, timezone = 'UTC',
+}) {
+  const { params, add } = paramList();
+  const where = filterClauses({ q: search, label, person, priority, flagged }, add);
+  // Open tasks always; closed ones only when asked for, and only recent ones.
+  if (status === 'done') where.push(`t.closed_at > now() - interval '${RECENTLY_CLOSED_DAYS} days'`);
+  else if (status) where.push(`t.closed_at IS NULL AND t.status = ${add(status)}`);
+  else if (closed) where.push(`(t.closed_at IS NULL OR t.closed_at > now() - interval '${RECENTLY_CLOSED_DAYS} days')`);
+  else where.push('t.closed_at IS NULL');
+  if (due) {
+    const today = `(now() AT TIME ZONE ${add(timezone)})::date`;
+    if (due === 'overdue') where.push(`t.closed_at IS NULL AND t.due_date < ${today}`);
+    if (due === 'week') where.push(`t.due_date BETWEEN ${today} AND ${today} + 6`);
+    if (due === 'none') where.push('t.due_date IS NULL');
+  }
+  const whereSql = where.join(' AND ');
+  const { total } = await one(`SELECT count(*)::int AS total FROM tasks t WHERE ${whereSql}`, params);
+
+  // Open tasks come before closed ones; missing due dates go last either way.
+  let order = `CASE t.priority WHEN 'high' THEN 0 WHEN 'med' THEN 1 ELSE 2 END ASC, t.id DESC`;
+  const s = TABLE_SORTS[sort];
+  if (s) {
+    const d = (dir || s.dir) === 'asc' ? 'ASC' : 'DESC';
+    order = `${s.sql} ${d}${sort === 'due' ? ' NULLS LAST' : ''}${sort === 'id' ? '' : ', t.id DESC'}`;
+  }
+  const limit = add(PAGE_SIZE);
+  const offset = add((Math.max(1, page) - 1) * PAGE_SIZE);
+  const { rows } = await q(
+    `SELECT ${CARD_COLUMNS}, t.updated_at ${CARD_FROM}
+     WHERE ${whereSql}
+     ORDER BY (t.closed_at IS NOT NULL), ${order}
+     LIMIT ${limit} OFFSET ${offset}`,
+    params,
+  );
+  return { rows, total };
 }
 
 export async function getTask(id) {

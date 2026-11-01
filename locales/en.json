@@ -22,6 +22,7 @@
     "main": "Main",
     "board": "Board",
     "list": "List",
+    "table": "Table",
     "audit": "Audit log",
     "people": "People",
     "labels": "Labels",
@@ -133,6 +134,33 @@
     "prev": "Previous",
     "next": "Next",
     "pageOf": "Page {page} of {pages}"
+  },
+  "table": {
+    "title": "Table",
+    "sub": "Every task in one sheet. Sort by any column and filter down to what you need.",
+    "caption": "Tasks, one per row",
+    "count": "Tasks: {n}",
+    "task": "Task",
+    "updated": "Updated",
+    "anyStatus": "Any status",
+    "recentlyClosed": "Recently closed",
+    "anyDue": "Any due date",
+    "due": {
+      "overdue": "Overdue",
+      "week": "Due in the next 7 days",
+      "none": "No due date"
+    },
+    "showClosed": "Show recently closed",
+    "colorBy": "Colour rows by",
+    "color": {
+      "status": "Status",
+      "priority": "Priority",
+      "label": "First label",
+      "none": "No colour"
+    },
+    "noLabels": "No labels",
+    "unassigned": "Unassigned",
+    "noDue": "No due date"
   },
   "task": {
     "new": "New task",
