@@ -371,7 +371,11 @@
     "labelUpdated": "updated the label {name}",
     "auditExported": "exported the audit log ({rows} rows)",
     "undo": " (undo)",
-    "wipLimitChanged": "changed the in-progress limit from {from} to {to}"
+    "wipLimitChanged": "changed the in-progress limit from {from} to {to}",
+    "invitedPerson": "invited {person} as {role} ({email})",
+    "inviteAcceptedRenamed": "accepted their invite and changed their name from “{from}”",
+    "personAdded": "added {name} without an account",
+    "personRenamed": "renamed “{from}” to “{to}”"
   },
   "act": {
     "task": {
@@ -419,6 +423,10 @@
     },
     "audit": {
       "exported": "Log exported"
+    },
+    "person": {
+      "added": "Person added",
+      "renamed": "Person renamed"
     }
   },
   "notify": {
@@ -507,7 +515,25 @@
     "resetBody": "Send this link to {name}. It works once and expires in 24 hours.",
     "link": "Link",
     "linkOnce": "This link is shown only once. It works once and then stops working.",
-    "backToPeople": "Back to People"
+    "backToPeople": "Back to People",
+    "addTitle": "Add someone without an account",
+    "name": "Name",
+    "add": "Add person",
+    "addHint": "For people who don’t have an account yet. You can assign tasks to them and credit them straight away, and invite them later.",
+    "badName": "Enter a name (up to 100 characters).",
+    "nameTaken": "Someone with that name is already on the list. Add a surname or initial to tell them apart.",
+    "nameTakenEnable": "Someone active already has this name. Rename one of them first.",
+    "added": "Added {name}. You can assign tasks to them now.",
+    "renamed": "Name changed.",
+    "noAccount": "No account yet",
+    "hasAccount": "That person already has an account.",
+    "personDisabled": "Re-enable this person before inviting them.",
+    "noAccountRole": "People without an account get their role from their invite.",
+    "inviteAction": "Invite",
+    "inviteFor": "Invite {name} with their work email. When they accept, the tasks already assigned to them become theirs.",
+    "renameAction": "Rename",
+    "forPerson": "for {name}",
+    "confirmDisablePerson": "Disable {name}? They’ll leave the pickers but stay on their past tasks."
   },
   "labels": {
     "title": "Labels",
@@ -617,7 +643,8 @@
     "inviteSub": "{who} invited you to join as a {role}.",
     "createAccount": "Create account",
     "inviteExpiry": "This invite expires on {d}.",
-    "nameRequired": "Add your name (up to 100 characters)."
+    "nameRequired": "Add your name (up to 100 characters).",
+    "nameTaken": "Someone active already uses that name. Add a surname or initial."
   },
   "setup": {
     "title": "Set up the workspace",

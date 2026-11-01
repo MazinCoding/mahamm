@@ -91,7 +91,7 @@ export function loadUser() {
     const user = await findUserById(id);
     const tooOld = !req.session.createdAt || Date.now() - req.session.createdAt > ABSOLUTE_LIFETIME_MS;
     const stale = !user || req.session.pwv !== new Date(user.password_changed_at).toISOString();
-    if (!user || user.status !== 'active' || tooOld || stale) {
+    if (!user || user.status !== 'active' || !user.email || tooOld || stale) {
       await destroySession(req);
       return next();
     }

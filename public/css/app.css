@@ -408,3 +408,13 @@ input[type='file']::file-selector-button:hover { background: var(--column); }
   .toolbar input[type='search'] { width: 100%; }
   .sheet .col-task { min-width: 170px; max-width: 210px; }
 }
+
+/* People without accounts: Invite and Rename open small forms under the name */
+.person-tools { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 2px 12px; margin-top: 6px; padding-inline-start: 26px; }
+.person-tools summary { list-style: none; cursor: pointer; }
+.person-tools summary::-webkit-details-marker { display: none; }
+.person-tools details[open] { flex-basis: 100%; }
+.mini-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; padding: 10px; max-width: 460px; background: var(--subtle); border: 1px solid var(--border); border-radius: 8px; }
+.mini-form .input { flex: 1 1 180px; min-width: 0; }
+.mini-form select.input { flex: 0 0 auto; }
+.mini-form .hint { flex-basis: 100%; margin: 0; }
