@@ -8,8 +8,10 @@ import { enforce } from '../ratelimit.js';
 import { MAX_IMPORT_BYTES, uploadThenCsrf } from '../uploads.js';
 import { FIELDS, buildPreview, getJob, guessMapping, parseSheet, readMapping, runImport, saveJob } from '../services/import.js';
 import { HttpError } from '../services/tasks.js';
-import { activePeople, changeRole, createInvite, createReset, peopleOverview, revokeInvite, setStatus } from '../services/users.js';
-import { idParam, inviteSchema, labelSchema, parse, uuidParam } from '../validation.js';
+import {
+  activePeople, addPerson, changeRole, createInvite, createReset, peopleOverview, renamePerson, revokeInvite, setStatus,
+} from '../services/users.js';
+import { cleanLine, idParam, inviteSchema, labelSchema, parse, personSchema, uuidParam } from '../validation.js';
 
 const AUDIT_PAGE = 100;
 
@@ -110,29 +112,22 @@ export default function adminRoutes(config) {
     res.send(`﻿${lines.join('\r\n')}\r\n`);
   });
 
-  r.get('/people', requireAuth, requireAdmin, async (req, res) => {
+  const peoplePage = async (req, res, status = 200, extra = {}) => {
     const { users, invites } = await peopleOverview();
-    res.render('people.njk', { users, invites, mail: mailEnabled(), values: { email: '', role: 'member' }, errors: {} });
-  });
+    res.status(status).render('people.njk', {
+      users, invites, mail: mailEnabled(), values: { email: '', role: 'member', name: '' }, errors: {}, ...extra,
+    });
+  };
 
-  r.post('/people/invite', requireAuth, requireAdmin, async (req, res) => {
-    await enforce(`invite-send:${req.user.id}`, 60, 3600);
-    const result = parse(inviteSchema, req.body);
-    if (result.errors) {
-      const { users, invites } = await peopleOverview();
-      return res.status(400).render('people.njk', {
-        users, invites, mail: mailEnabled(), values: { email: String(req.body.email || '').slice(0, 254), role: req.body.role === 'admin' ? 'admin' : 'member' },
-        errors: { email: req.t('people.badEmail') },
-      });
-    }
+  r.get('/people', requireAuth, requireAdmin, async (req, res) => peoplePage(req, res));
+
+  // Sends an invite, optionally tied to a person without an account, and shows the link once.
+  async function sendInvite(req, res, { email, role, userId = null, onConflict }) {
     let created;
     try {
-      created = await createInvite(result.data.email, result.data.role, req.user, req.ip);
+      created = await createInvite(email, role, req.user, req.ip, userId);
     } catch (err) {
-      if (err instanceof HttpError && err.status === 409) {
-        flash(req, req.t('people.alreadyMember'), 'warn');
-        return res.redirect('/people');
-      }
+      if (err instanceof HttpError && err.status === 409) return onConflict(err.message);
       throw err;
     }
     const link = `${config.origin}/invite/${created.token}`;
@@ -143,19 +138,85 @@ export default function adminRoutes(config) {
         appName: config.appName,
         lang: req.lang,
         heading: t('email.inviteHeading', { app: config.appName }),
-        lines: [t('email.inviteBody', { who: req.user.name, role: t(`role.${result.data.role}`) })],
+        lines: [t('email.inviteBody', { who: req.user.name, role: t(`role.${role}`) })],
         buttonText: t('email.inviteButton'),
         url: link,
         footer: t('email.inviteFooter'),
       });
-      emailed = await sendNow({ to: result.data.email, subject: t('email.inviteSubject', { who: req.user.name, app: config.appName }), text, html });
+      emailed = await sendNow({ to: email, subject: t('email.inviteSubject', { who: req.user.name, app: config.appName }), text, html });
     }
     // The link is shown once, to the admin who made it.
-    res.render('link-once.njk', {
+    return res.render('link-once.njk', {
       title: req.t('people.inviteCreated'),
-      body: emailed ? req.t('people.inviteEmailed', { email: result.data.email }) : req.t('people.inviteNotEmailed', { email: result.data.email }),
+      body: emailed ? req.t('people.inviteEmailed', { email }) : req.t('people.inviteNotEmailed', { email }),
       link,
     });
+  }
+
+  const inviteConflict = (req, res) => (reason) => {
+    const map = { 'already a member': 'people.alreadyMember', 'has account': 'people.hasAccount', 'person disabled': 'people.personDisabled' };
+    flash(req, req.t(map[reason] || 'errors.conflict'), 'warn');
+    return res.redirect('/people');
+  };
+
+  r.post('/people/invite', requireAuth, requireAdmin, async (req, res) => {
+    await enforce(`invite-send:${req.user.id}`, 60, 3600);
+    const result = parse(inviteSchema, req.body);
+    if (result.errors) {
+      return peoplePage(req, res, 400, {
+        values: { email: String(req.body.email || '').slice(0, 254), role: req.body.role === 'admin' ? 'admin' : 'member', name: '' },
+        errors: { email: req.t('people.badEmail') },
+      });
+    }
+    return sendInvite(req, res, { ...result.data, onConflict: inviteConflict(req, res) });
+  });
+
+  // People without accounts: added by name, assignable and creditable straight away.
+  r.post('/people/add', requireAuth, requireAdmin, async (req, res) => {
+    await enforce(`person-add:${req.user.id}`, 200, 3600);
+    const result = parse(personSchema, req.body);
+    if (result.errors) {
+      return peoplePage(req, res, 400, { values: { email: '', role: 'member', name: cleanLine(req.body.name).slice(0, 100) }, errors: { name: req.t('people.badName') } });
+    }
+    try {
+      const person = await addPerson(result.data.name, req.user, req.ip);
+      flash(req, req.t('people.added', { name: person.name }));
+    } catch (err) {
+      if (!(err instanceof HttpError && err.status === 409)) throw err;
+      return peoplePage(req, res, 409, { values: { email: '', role: 'member', name: result.data.name }, errors: { name: req.t('people.nameTaken') } });
+    }
+    res.redirect('/people');
+  });
+
+  r.post('/people/:id/rename', requireAuth, requireAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id);
+    if (!id) throw new HttpError(404, 'not found');
+    await enforce(`person-rename:${req.user.id}`, 200, 3600);
+    const result = parse(personSchema, req.body);
+    if (result.errors) {
+      flash(req, req.t('people.badName'), 'warn');
+      return res.redirect('/people');
+    }
+    try {
+      await renamePerson(id, result.data.name, req.user, req.ip);
+      flash(req, req.t('people.renamed'));
+    } catch (err) {
+      if (!(err instanceof HttpError && err.status === 409)) throw err;
+      flash(req, req.t(err.message === 'name taken' ? 'people.nameTaken' : 'people.hasAccount'), 'warn');
+    }
+    res.redirect('/people');
+  });
+
+  r.post('/people/:id/invite', requireAuth, requireAdmin, async (req, res) => {
+    const id = uuidParam(req.params.id);
+    if (!id) throw new HttpError(404, 'not found');
+    await enforce(`invite-send:${req.user.id}`, 60, 3600);
+    const result = parse(inviteSchema, req.body);
+    if (result.errors) {
+      flash(req, req.t('people.badEmail'), 'warn');
+      return res.redirect('/people');
+    }
+    return sendInvite(req, res, { ...result.data, userId: id, onConflict: inviteConflict(req, res) });
   });
 
   r.post('/people/invites/:id/revoke', requireAuth, requireAdmin, async (req, res) => {
@@ -172,7 +233,10 @@ export default function adminRoutes(config) {
       return null;
     } catch (err) {
       if (err instanceof HttpError && err.status === 409) {
-        const map = { 'last admin': 'people.lastAdmin', 'cannot change own role': 'people.notYourself', 'cannot disable yourself': 'people.notYourself' };
+        const map = {
+          'last admin': 'people.lastAdmin', 'cannot change own role': 'people.notYourself',
+          'cannot disable yourself': 'people.notYourself', 'has no account': 'people.noAccountRole', 'name taken': 'people.nameTakenEnable',
+        };
         return req.t(map[err.message] || 'errors.conflict');
       }
       throw err;
@@ -199,7 +263,7 @@ export default function adminRoutes(config) {
 
   r.post('/people/:id/reset-link', requireAuth, requireAdmin, async (req, res) => {
     const id = uuidParam(req.params.id);
-    const target = id ? await one(`SELECT id, name FROM users WHERE id = $1 AND status = 'active'`, [id]) : null;
+    const target = id ? await one(`SELECT id, name FROM users WHERE id = $1 AND status = 'active' AND email IS NOT NULL`, [id]) : null;
     if (!target) throw new HttpError(404, 'not found');
     await enforce(`reset-link:${req.user.id}`, 20, 3600);
     const token = await createReset(target.id, req.user.id, 24, req.ip);

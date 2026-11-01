@@ -223,6 +223,45 @@ await step('import', async () => {
   await shot(page, '20-import-review');
 });
 
+// People without accounts: add by name, pick them as an assignee, then invite them.
+await step('people-without-accounts', async () => {
+  await page.goto(`${base}/people`);
+  await page.fill('#add-name', 'Hamed Al-Rawahi');
+  await Promise.all([page.waitForEvent('load'), page.click('form[action="/people/add"] button[type=submit]')]);
+  note(`check: add person = ${(await page.locator('.flash').innerText()).trim()}`);
+  const row = page.locator('tr', { hasText: 'Hamed Al-Rawahi' });
+  note(`check: badge on the new person = ${(await row.locator('.chip.c-amber').innerText()).trim()}`);
+  await shot(page, '14b-people-added');
+  await row.locator('summary', { hasText: 'Invite' }).click();
+  await shot(page, '14c-people-invite-open');
+  await page.goto(`${base}/tasks/new`);
+  note(`check: new person offered as an assignee = ${(await page.content()).includes('Hamed Al-Rawahi') ? 'yes' : 'NO'}`);
+  await page.goto(`${base}/people`);
+  const again = page.locator('tr', { hasText: 'Hamed Al-Rawahi' });
+  await again.locator('summary', { hasText: 'Invite' }).click();
+  await again.locator('input[type=email]').fill('hamed@example.com');
+  await Promise.all([page.waitForEvent('load'), again.locator('form[action$="/invite"] button[type=submit]').click()]);
+  const link = await page.locator('input[value*="/invite/"]').inputValue();
+  const guestContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const guest = await guestContext.newPage();
+  watch(guest, 'invitee');
+  await guest.goto(link);
+  note(`check: invite page name pre-filled = ${await guest.inputValue('#name')}`);
+  await shot(guest, '14d-invite-accept-prefilled');
+  await guest.fill('#name', 'Hamed Al-Rawahi');
+  await guest.fill('#password', process.env.DEMO_PASSWORD);
+  await guest.fill('#confirm', process.env.DEMO_PASSWORD);
+  await Promise.all([guest.waitForEvent('load'), guest.click('form[action^="/invite/"] button[type=submit]')]);
+  note(`check: after accepting, invitee lands on ${new URL(guest.url()).pathname}`);
+  await guestContext.close();
+  await page.goto(`${base}/people`);
+  const joined = page.locator('tbody tr', { has: page.locator('.person', { hasText: 'Hamed Al-Rawahi' }) });
+  note(`check: after joining, the row shows ${(await joined.locator('[dir="ltr"]').first().innerText()).trim()} and badge count ${await joined.locator('.chip.c-amber').count()}`);
+  await page.fill('#add-name', 'Badria Without Account');
+  await Promise.all([page.waitForEvent('load'), page.click('form[action="/people/add"] button[type=submit]')]);
+  await shot(page, '14e-people-after-join');
+});
+
 // Close a task through the form, crediting someone else.
 await step('close-flow', async () => {
   await page.goto(`${base}/tasks/${ids.safari}/close`);
@@ -242,7 +281,7 @@ await step('arabic', async () => {
   await page.waitForURL('**/board');
   note(`check: html dir after switching language = ${await page.getAttribute('html', 'dir')}`);
   await shot(page, '21-board-ar');
-  for (const [name, url] of [['22-task-ar', `/tasks/${ids.coffee}`], ['23-close-form-ar', `/tasks/${ids.pdf}/close`], ['24-audit-ar', '/audit'], ['25-list-ar', '/tasks'], ['25b-table-ar', '/table?closed=1']]) {
+  for (const [name, url] of [['22-task-ar', `/tasks/${ids.coffee}`], ['23-close-form-ar', `/tasks/${ids.pdf}/close`], ['24-audit-ar', '/audit'], ['24b-people-ar', '/people'], ['25-list-ar', '/tasks'], ['25b-table-ar', '/table?closed=1']]) {
     await page.goto(`${base}${url}`);
     await shot(page, name);
   }
@@ -254,7 +293,7 @@ await step('arabic', async () => {
 const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, storageState: await desktop.storageState() });
 const mobile = await phone.newPage();
 watch(mobile, 'phone');
-for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tasks/${ids.pdf}`], ['28-phone-list', '/tasks'], ['28b-phone-table', '/table'], ['29-phone-close', `/tasks/${ids.projector}/close`]]) {
+for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tasks/${ids.pdf}`], ['28-phone-list', '/tasks'], ['28b-phone-table', '/table'], ['28c-phone-people', '/people'], ['29-phone-close', `/tasks/${ids.projector}/close`]]) {
   await step(name, async () => {
     await mobile.goto(`${base}${url}`);
     await shot(mobile, name);

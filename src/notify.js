@@ -23,7 +23,8 @@ export async function notifyBatch(db, { kind, actor, items }) {
     if (ids.length === 0) continue;
     await db.query(
       `INSERT INTO notifications (user_id, task_id, actor_id, kind)
-       SELECT u.id, $2, $3, $4 FROM users u WHERE u.id = ANY($1::uuid[]) AND u.status = 'active'`,
+       SELECT u.id, $2, $3, $4 FROM users u
+       WHERE u.id = ANY($1::uuid[]) AND u.status = 'active' AND u.email IS NOT NULL`,
       [ids, item.task.id, actor?.id ?? null, kind],
     );
     for (const id of ids) {
@@ -33,7 +34,8 @@ export async function notifyBatch(db, { kind, actor, items }) {
   }
   if (!EMAIL_KINDS.has(kind) || perUser.size === 0) return;
   const { rows } = await db.query(
-    `SELECT id, email, lang FROM users WHERE id = ANY($1::uuid[]) AND status = 'active' AND email_notifications`,
+    `SELECT id, email, lang FROM users
+     WHERE id = ANY($1::uuid[]) AND status = 'active' AND email IS NOT NULL AND email_notifications`,
     [[...perUser.keys()]],
   );
   const actorName = actor?.name || settings.appName;
