@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  GITLEAKS_VERSION: 8.24.3
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,10 +28,10 @@ jobs:
     env:
       TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/mahamm_test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Install dependencies
@@ -42,18 +45,25 @@ jobs:
         run: |
           npm test 2>&1 | tee test-output.txt
           exit ${PIPESTATUS[0]}
-      - name: Dependency audit
+      - name: Dependency audit (fails on high or critical)
         if: always()
         shell: bash
         run: |
-          npm audit --omit=dev --audit-level=high 2>&1 | tee audit-output.txt
-          exit ${PIPESTATUS[0]}
+          npm audit --omit=dev 2>&1 | tee audit-output.txt
+          npm audit --omit=dev --audit-level=high > /dev/null
       - name: Scan the full git history for secrets
         if: always()
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # Temporary: publishes the lockfile and test output to a `ci-results`
+        shell: bash
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "/tmp/${tarball}" "${base}/${tarball}"
+          curl -sSfL -o /tmp/checksums.txt "${base}/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          (cd /tmp && grep " ${tarball}\$" checksums.txt | sha256sum -c -)
+          tar -xzf "/tmp/${tarball}" -C /tmp gitleaks
+          /tmp/gitleaks git --redact --verbose --exit-code 1 . 2>&1 | tee gitleaks-output.txt
+          exit ${PIPESTATUS[0]}
+      # Temporary: publishes the lockfile and step output to a `ci-results`
       # branch so they can be reviewed without the Actions UI.
       - name: Publish results
         if: always() && github.event_name != 'pull_request'
@@ -62,7 +72,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p /tmp/results
-          cp package-lock.json install-output.txt test-output.txt audit-output.txt /tmp/results/ 2>/dev/null || true
+          cp package-lock.json install-output.txt test-output.txt audit-output.txt gitleaks-output.txt /tmp/results/ 2>/dev/null || true
           echo "${GITHUB_SHA}" > /tmp/results/commit.txt
           cd /tmp/results
           git init -q -b ci-results
