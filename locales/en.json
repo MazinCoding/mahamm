@@ -113,7 +113,11 @@
     "overWip": "More than {n} tasks in progress. Finish something before starting more.",
     "dropHere": "Drop a task here",
     "seeClosed": "See all closed tasks",
-    "moveFailed": "That move didn’t save. Reload the page and try again."
+    "moveFailed": "That move didn’t save. Reload the page and try again.",
+    "wipLabel": "In-progress limit",
+    "wipSave": "Save limit",
+    "wipSaved": "In-progress limit set to {n}.",
+    "wipInvalid": "The limit must be a whole number from 1 to 50."
   },
   "list": {
     "title": "All tasks",
@@ -192,12 +196,20 @@
         "added": "Assigned: {name}.",
         "removed": "Unassigned: {name}."
       },
-      "closedN": "Tasks closed: {n}."
+      "closedN": "Tasks closed: {n}.",
+      "overWip": "In progress is now over the limit ({n} / {limit})."
     },
     "selection": "Selection",
     "selectAll": "Select all on this page",
     "selectNone": "Clear selection",
-    "doneButton": "Done…"
+    "doneButton": "Done…",
+    "wip": "In progress: {n} / {limit}",
+    "quickLabel": "New task title",
+    "quickPh": "Add a task: type a title and press Enter",
+    "quickAdd": "Add task",
+    "quickAdded": "Added {n}.",
+    "quickEmpty": "Type a title first.",
+    "quickTooLong": "Titles can be up to 200 characters."
   },
   "bulkClose": {
     "title": "Close selected tasks",
@@ -358,7 +370,8 @@
     "labelCreated": "created the label {name}",
     "labelUpdated": "updated the label {name}",
     "auditExported": "exported the audit log ({rows} rows)",
-    "undo": " (undo)"
+    "undo": " (undo)",
+    "wipLimitChanged": "changed the in-progress limit from {from} to {to}"
   },
   "act": {
     "task": {

@@ -184,6 +184,24 @@ await step('table-ribbon', async () => {
   note(`check: after Undo = ${(await page.locator('.flash').innerText()).trim()}; rows back = ${await page.locator(closing.map((id) => `tr[data-task-id="${id}"]`).join(', ')).count()}`);
 });
 
+// Quick-add row, and an admin changing the in-progress limit.
+await step('table-quick-add', async () => {
+  await page.goto(`${base}/table`);
+  await page.fill('#quick-title', 'Check the fire extinguishers on every floor');
+  await Promise.all([page.waitForEvent('load'), page.press('#quick-title', 'Enter')]);
+  const focus = await page.evaluate(() => ({ id: document.activeElement?.id, hash: window.location.hash, hasFocus: document.hasFocus(), auto: !!document.querySelector('#quick-title[autofocus]') }));
+  note(`check: quick-add = ${(await page.locator('.flash').innerText()).trim()}; cursor back in the box = ${focus.id || 'no'} (address ${focus.hash || 'no fragment'}, window focused ${focus.hasFocus}, autofocus marked ${focus.auto})`);
+  await shot(page, '06j-table-quick-add');
+  await page.goto(`${base}/board`);
+  const before = await page.inputValue('#wip-limit');
+  await page.fill('#wip-limit', '3');
+  await Promise.all([page.waitForEvent('load'), page.click('.wip-form button')]);
+  note(`check: limit form = ${(await page.locator('.flash').innerText()).trim()}; stat = ${(await page.locator('.stat').nth(1).locator('.stat-value').innerText()).trim()}`);
+  await shot(page, '06k-board-limit-changed');
+  await page.fill('#wip-limit', before);
+  await Promise.all([page.waitForEvent('load'), page.click('.wip-form button')]);
+});
+
 // Excel import: upload a sheet with gaps and an unknown name.
 const wb = new ExcelJS.Workbook();
 const ws = wb.addWorksheet('Requests');

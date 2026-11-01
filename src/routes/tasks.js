@@ -1,6 +1,6 @@
 import express from 'express';
 import { describe } from '../audit.js';
-import { requireAuth } from '../auth.js';
+import { requireAdmin, requireAuth } from '../auth.js';
 import { q } from '../db.js';
 import { limiter } from '../ratelimit.js';
 import { safeLocalPath } from '../security.js';
@@ -12,9 +12,10 @@ import {
 } from '../services/tasks.js';
 
 const TABLE_COLORS = ['status', 'priority', 'label', 'none'];
+import { getWipLimit, inProgressCount, setWipLimit } from '../services/settings.js';
 import { activePeople, allPeopleNames } from '../services/users.js';
 import {
-  bulkCloseSchema, bulkIdsSchema, bulkSchema, closeSchema, commentSchema, undoSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
+  bulkCloseSchema, bulkIdsSchema, bulkSchema, closeSchema, commentSchema, quickAddSchema, undoSchema, wipLimitSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
 } from '../validation.js';
 
 async function allLabels() {
@@ -43,7 +44,8 @@ export default function taskRoutes(config) {
 
   r.get('/board', requireAuth, async (req, res) => {
     const mine = req.query.mine === '1';
-    const [tasks, stats] = await Promise.all([boardTasks({ onlyUserId: mine ? req.user.id : null }), boardStats(config.wipLimit, config.timezone)]);
+    const wipLimit = await getWipLimit(config.wipLimit);
+    const [tasks, stats] = await Promise.all([boardTasks({ onlyUserId: mine ? req.user.id : null }), boardStats(wipLimit, config.timezone)]);
     const columns = [...OPEN_STATUSES, 'done'].map((key) => ({
       key,
       tasks: tasks.filter((t) => (key === 'done' ? !!t.closed_at : !t.closed_at && t.status === key)),
@@ -51,7 +53,7 @@ export default function taskRoutes(config) {
     const done = columns.find((c) => c.key === 'done');
     done.tasks.sort((a, b) => new Date(b.closed_at) - new Date(a.closed_at));
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(new Date());
-    res.render('board.njk', { columns, stats, mine, today, wipLimit: config.wipLimit });
+    res.render('board.njk', { columns, stats, mine, today, wipLimit });
   });
 
   r.get('/tasks', requireAuth, async (req, res) => {
@@ -108,8 +110,9 @@ export default function taskRoutes(config) {
       color: pick(req.query.color, TABLE_COLORS) || 'status',
       page: Math.min(idParam(req.query.page) || 1, 10000),
     };
-    const [{ rows, total }, labels, people, assignable] = await Promise.all([
+    const [{ rows, total }, labels, people, assignable, wipLimit, wipCount] = await Promise.all([
       tableTasks({ ...filters, timezone: config.timezone }), allLabels(), allPeopleNames(), activePeople(),
+      getWipLimit(config.wipLimit), inProgressCount(),
     ]);
     for (const row of rows) row.editable = !row.closed_at && canEdit(req.user, row);
     const query = (extra = {}) => {
@@ -130,7 +133,7 @@ export default function taskRoutes(config) {
       return [key, { url: query({ sort: key, dir: next, page: 1 }), current }];
     }));
     res.render('table.njk', {
-      rows, total, labels, people, assignable, filters, sortLinks,
+      rows, total, labels, people, assignable, filters, sortLinks, wip: { count: wipCount, limit: wipLimit },
       today: new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(new Date()),
       pages: Math.max(1, Math.ceil(total / PAGE_SIZE)),
       prevUrl: filters.page > 1 ? query({ page: filters.page - 1 }) : null,
@@ -170,7 +173,12 @@ export default function taskRoutes(config) {
       if (err instanceof HttpError && err.status === 400) return refuse('table.invalid');
       throw err;
     }
-    const text = await bulkMessage(req, op, value, outcome);
+    let text = await bulkMessage(req, op, value, outcome);
+    // Going over the in-progress limit is allowed, but said out loud.
+    if (op === 'status' && value === 'progress' && outcome.updated.length) {
+      const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(config.wipLimit)]);
+      if (count > limit) text += ` ${req.t('table.result.overWip', { n: count, limit })}`;
+    }
     flash(req, text, outcome.updated.length ? 'ok' : 'warn', outcome.updated.length ? outcome.batch : null);
     if (json) return res.json({ ok: true, updated: outcome.updated, skipped: outcome.skipped });
     return res.redirect(back);
@@ -250,6 +258,37 @@ export default function taskRoutes(config) {
     const parts = [out.undone.length ? req.t('undo.done', { n: out.undone.length }) : req.t('undo.none')];
     if (out.changed.length) parts.push(req.t('undo.changed', { list: list(out.changed) }));
     flash(req, parts.join(' '), out.undone.length ? 'ok' : 'warn');
+    return res.redirect(back);
+  });
+
+  // Quick-add row at the bottom of the table: just a title; the rest is painted on afterwards.
+  r.post('/tasks/quick', requireAuth, writeLimit, async (req, res) => {
+    const back = tableBack(req.body.back);
+    const result = parse(quickAddSchema, req.body);
+    if (result.errors) {
+      const tooLong = String(req.body.title ?? '').trim().length > 200;
+      flash(req, req.t(tooLong ? 'table.quickTooLong' : 'table.quickEmpty'), 'warn');
+      req.session.flash.focus = 'quick-add';
+      return res.redirect(back);
+    }
+    const task = await createTask({
+      title: result.data.title, description: '', status: result.data.status, priority: 'med', due_date: '', labels: [], assignees: [],
+    }, req.user, req.ip);
+    flash(req, req.t('table.quickAdded', { n: `#${task.id}` }));
+    req.session.flash.focus = 'quick-add';
+    return res.redirect(back);
+  });
+
+  // Admins set the in-progress limit. Going over it only warns; nothing is blocked.
+  r.post('/board/wip-limit', requireAuth, requireAdmin, writeLimit, async (req, res) => {
+    const back = req.body.back === 'table' ? '/table' : '/board';
+    const result = parse(wipLimitSchema, req.body);
+    if (result.errors) {
+      flash(req, req.t('board.wipInvalid'), 'warn');
+      return res.redirect(back);
+    }
+    const { changed } = await setWipLimit(result.data.limit, config.wipLimit, req.user, req.ip);
+    flash(req, changed ? req.t('board.wipSaved', { n: result.data.limit }) : req.t('task.noChanges'));
     return res.redirect(back);
   });
 

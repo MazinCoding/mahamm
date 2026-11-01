@@ -8,6 +8,16 @@
   <a class="sort-link" href="{{ s.url }}">{{ label }}<span class="sort-mark" aria-hidden="true">{% if s.current == 'asc' %}▲{% elif s.current == 'desc' %}▼{% endif %}</span></a>
 </th>
 {%- endmacro %}
+{% macro quickAdd() %}
+<form id="quick-add" class="quick-add" method="post" action="/tasks/quick">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <input type="hidden" name="back" value="{{ currentUrl }}">
+  <input type="hidden" name="status" value="{{ 'backlog' if filters.status == 'backlog' else 'todo' }}">
+  <label class="sr-only" for="quick-title">{{ t('table.quickLabel') }}</label>
+  <input id="quick-title" class="input input-sm" name="title" maxlength="200" dir="auto" placeholder="{{ t('table.quickPh') }}" autocomplete="off"{% if flash and flash.focus == 'quick-add' %} autofocus{% endif %}>
+  <button class="btn btn-secondary btn-sm" type="submit">{{ t('table.quickAdd') }}</button>
+</form>
+{% endmacro %}
 {% macro lockMark(task) %}{% if not task.editable and not task.closed_at %}<span class="lock" role="img" aria-label="{{ t('table.lockSr') }}" title="{{ t('table.lockSr') }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span>{% endif %}{% endmacro %}
 <div class="page-head">
   <div>
@@ -75,7 +85,7 @@
     {# Pressing Enter in the date field uses the first submit button, so make that "Set date". #}
     <button class="sr-only" type="submit" name="apply" value="due" tabindex="-1" aria-hidden="true">{{ t('table.setDue') }}</button>
     <div class="ribbon-group" role="group" aria-labelledby="rg-status" data-group="status">
-      <span class="ribbon-label" id="rg-status">{{ t('field.status') }}</span>
+      <span class="ribbon-head"><span class="ribbon-label" id="rg-status">{{ t('field.status') }}</span><span class="wip-count{% if wip.count > wip.limit %} is-over{% endif %}">{{ t('table.wip', { n: wip.count, limit: wip.limit }) }}</span></span>
       <div class="ribbon-buttons">{% for s in ['backlog', 'todo', 'progress', 'review'] %}<button class="rb s-{{ s }}" type="submit" name="apply" value="status:{{ s }}">{{ t('status.' + s) }}</button>{% endfor %}<button class="rb s-done" type="submit" name="apply" value="close">{{ t('table.doneButton') }}</button></div>
     </div>
     <div class="ribbon-group" role="group" aria-labelledby="rg-prio" data-group="priority">
@@ -160,6 +170,7 @@
         </tr>
         {% endfor %}
       </tbody>
+      <tfoot><tr><td colspan="7" class="quick-cell">{{ quickAdd() }}</td></tr></tfoot>
     </table>
   </div>
   {% else %}
@@ -167,6 +178,7 @@
     <p>{{ t('list.empty') }}</p>
     {% if hasFilters %}<a class="link-sm" href="{{ clearUrl }}">{{ t('list.clear') }}</a>{% endif %}
   </div>
+  <div class="quick-cell">{{ quickAdd() }}</div>
   {% endif %}
 </div>
 

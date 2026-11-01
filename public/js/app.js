@@ -342,6 +342,11 @@
     }
   }
 
+  // After a quick add the server marks the title box autofocus; focusing it
+  // here as well also scrolls it into view in browsers that skip autofocus.
+  var quickTitle = document.querySelector('#quick-title[autofocus]');
+  if (quickTitle && document.activeElement !== quickTitle) quickTitle.focus();
+
   // Close form: show "who did it" only for Completed, "duplicate of" only for Duplicate.
   var closeForm = document.querySelector('[data-close-form]');
   if (closeForm) {

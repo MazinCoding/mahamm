@@ -9,7 +9,7 @@ export const GROUPS = {
     'setup.completed', 'auth.signed_in', 'auth.signin_paused', 'auth.password_changed', 'auth.password_reset',
     'auth.two_factor_enabled', 'auth.two_factor_disabled', 'auth.recovery_code_used',
     'user.invited', 'invite.revoked', 'invite.accepted', 'user.role_changed', 'user.disabled', 'user.enabled',
-    'user.reset_link_created', 'label.created', 'label.updated', 'audit.exported',
+    'user.reset_link_created', 'label.created', 'label.updated', 'audit.exported', 'settings.wip_limit_changed',
   ],
 };
 
@@ -93,6 +93,7 @@ export function describe(ev, t, { names = {}, labels = {} } = {}) {
     case 'label.created': return t('ev.labelCreated', { name: d.name || '' });
     case 'label.updated': return t('ev.labelUpdated', { name: d.name || '' });
     case 'audit.exported': return t('ev.auditExported', { rows: d.rows ?? 0 });
+    case 'settings.wip_limit_changed': return t('ev.wipLimitChanged', { from: d.from ?? '', to: d.to ?? '' });
     default: return ev.action;
   }
 }
