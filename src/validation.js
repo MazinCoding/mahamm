@@ -72,6 +72,21 @@ export const bulkSchema = z.preprocess((input) => {
   if (check && !check.safeParse(v.value).success) ctx.addIssue({ code: 'custom', path: ['value'], message: 'invalid' });
 }));
 
+const bulkIds = z.preprocess(toArray, z.array(z.coerce.number().int().positive().max(999999999)).min(1).max(50))
+  .transform((ids) => [...new Set(ids)]);
+
+// Table "Done" page: one credit choice per task, in the same order as the ids.
+// An empty choice means "its assignees".
+export const bulkCloseSchema = z.object({
+  ids: z.preprocess(toArray, z.array(z.coerce.number().int().positive().max(999999999)).min(1).max(50)),
+  reason: z.enum(['completed', 'notneeded', 'mistake']),
+  credit: z.preprocess(toArray, z.array(z.union([z.literal(''), z.string().uuid()])).max(50)),
+});
+
+export const bulkIdsSchema = z.object({ ids: bulkIds });
+
+export const undoSchema = z.object({ batch: z.string().uuid() });
+
 export const commentSchema = z.object({ body: z.preprocess(clean, z.string().min(1).max(5000)) });
 
 export const flagSchema = z.object({

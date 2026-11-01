@@ -1,0 +1,60 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('bulkClose.title') }}{% endblock %}
+{% block content %}
+<a class="back" href="{{ back }}"><svg class="flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>{{ t('common.back') }}</a>
+<div class="page-head"><div><h1>{{ t('bulkClose.title') }}</h1><p class="sub">{{ t('bulkClose.sub', { n: tasks.length }) }}</p></div></div>
+
+{% if errors.missing %}<div class="alert" role="alert">{{ t('bulkClose.missingError') }}</div>{% endif %}
+{% if errors.form %}<div class="alert" role="alert">{{ t('table.invalid') }}</div>{% endif %}
+{% if alreadyClosed %}<p class="info-bar warn">{{ t('bulkClose.alreadyClosed', { list: alreadyClosed }) }}</p>{% endif %}
+
+<form class="form card-form" method="post" action="/tasks/bulk/close" data-close-form>
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <input type="hidden" name="back" value="{{ back }}">
+  <fieldset class="field">
+    <legend>{{ t('close.why') }}</legend>
+    <div class="radios">
+      {% for r in ['completed', 'notneeded', 'mistake'] %}
+      <label class="radio-card">
+        <input type="radio" name="reason" value="{{ r }}" {% if values.reason == r %}checked{% endif %}>
+        <span><span class="strong">{{ t('reason.' + r) }}</span><span class="small muted block">{{ t('reasonHint.' + r) }}</span></span>
+      </label>
+      {% endfor %}
+    </div>
+    <p class="hint">{{ t('bulkClose.duplicateNote') }}</p>
+  </fieldset>
+
+  <fieldset class="field">
+    <legend>{{ t('bulkClose.tasks') }}</legend>
+    <p class="hint" data-show-for="completed">{{ t('bulkClose.whoHint') }}</p>
+    <ul class="close-list">
+      {% for task in tasks %}
+      {% set chosen = values.credit[task.id] or '' %}
+      {% set missing = errors.missing and task.id in errors.missing %}
+      <li class="close-item{% if missing %} is-missing{% endif %}">
+        <input type="hidden" name="ids" value="{{ task.id }}">
+        <span class="close-item-title"><span class="num">#{{ task.id }}</span> <a dir="auto" href="/tasks/{{ task.id }}">{{ task.title }}</a></span>
+        <span class="close-item-credit" data-show-for="completed">
+          <label class="sr-only" for="credit-{{ task.id }}">{{ t('bulkClose.whoFor', { n: '#' + task.id }) }}</label>
+          <select id="credit-{{ task.id }}" class="input input-sm" name="credit"{% if missing %} aria-invalid="true"{% endif %}>
+            {% if task.assignees.length %}
+            <option value="">{{ t('bulkClose.assignees', { people: task.assignees | join(t('common.listSep'), 'name') }) }}</option>
+            {% else %}
+            <option value="">{{ t('bulkClose.missing') }}</option>
+            {% endif %}
+            {% for p in people %}<option value="{{ p.id }}" {% if chosen == p.id %}selected{% endif %}>{{ p.name }}{% if p.id == user.id %} ({{ t('common.you') }}){% endif %}</option>{% endfor %}
+          </select>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+  </fieldset>
+
+  <p class="note">{{ t('close.recordNote', { me: user.name }) }}</p>
+  <div class="form-actions">
+    <a class="btn btn-secondary" href="{{ back }}">{{ t('common.cancel') }}</a>
+    <button class="btn btn-primary" type="submit">{{ t('bulkClose.submit') }}</button>
+  </div>
+</form>
+{% endblock %}

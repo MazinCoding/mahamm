@@ -283,13 +283,13 @@ async function lockTask(db, id) {
   return rows[0];
 }
 
-async function reopenInside(db, task, actor, ip, toStatus) {
+async function reopenInside(db, task, actor, ip, toStatus, details = {}) {
   await db.query(
     `UPDATE tasks SET closed_at = NULL, closed_by = NULL, close_reason = NULL, duplicate_of = NULL, status = $2, updated_at = now() WHERE id = $1`,
     [task.id, toStatus],
   );
   await db.query('DELETE FROM task_credits WHERE task_id = $1', [task.id]);
-  await audit(db, { actorId: actor.id, action: 'task.reopened', taskId: task.id, ip });
+  await audit(db, { actorId: actor.id, action: 'task.reopened', taskId: task.id, details, ip });
 }
 
 export async function moveTask(id, to, actor, ip) {
@@ -403,6 +403,149 @@ export async function bulkApply(ids, { op, value }, actor, ip) {
     }
 
     return { batch, updated, skipped, toggled };
+  });
+}
+
+// Table "Done": close several tasks at once. Anyone can close, as on the board.
+// Completed needs someone credited for every task: the person picked for it, or
+// else its assignees. If any task has neither, nothing is closed.
+export const BULK_CLOSE_REASONS = ['completed', 'notneeded', 'mistake'];
+
+export async function tasksToClose(ids) {
+  const { rows } = await q(
+    `SELECT t.id, t.title, t.closed_at,
+            COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name) ORDER BY u.name)
+                      FROM task_assignees ta JOIN users u ON u.id = ta.user_id
+                      WHERE ta.task_id = t.id AND u.status = 'active'), '[]') AS assignees
+     FROM tasks t WHERE t.id = ANY($1::int[]) ORDER BY t.id`,
+    [ids],
+  );
+  return rows;
+}
+
+export async function bulkClose(ids, { reason, credits = {} }, actor, ip) {
+  if (!BULK_CLOSE_REASONS.includes(reason)) throw new HttpError(400, 'bad reason');
+  const batch = randomUUID();
+  return tx(async (db) => {
+    const { rows: found } = await db.query('SELECT id, title, closed_at FROM tasks WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE', [ids]);
+    const foundIds = new Set(found.map((t) => t.id));
+    const skipped = { missing: ids.filter((id) => !foundIds.has(id)), closed: found.filter((t) => t.closed_at).map((t) => t.id), locked: [] };
+    const open = found.filter((t) => !t.closed_at);
+    const plan = new Map();
+    if (reason === 'completed') {
+      const missing = [];
+      for (const t of open) {
+        const picked = credits[t.id] ? await activeIds(db, [credits[t.id]]) : [];
+        const people = picked.length ? picked
+          : (await db.query(
+            `SELECT ta.user_id FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = $1 AND u.status = 'active' ORDER BY ta.user_id`,
+            [t.id],
+          )).rows.map((r) => r.user_id);
+        if (people.length === 0) missing.push(t.id);
+        plan.set(t.id, people);
+      }
+      if (missing.length) {
+        const err = new HttpError(400, 'credit required');
+        err.missing = missing;
+        throw err;
+      }
+    }
+    const credited = [];
+    for (const t of open) {
+      const people = plan.get(t.id) || [];
+      await db.query(
+        `UPDATE tasks SET closed_at = now(), closed_by = $2, close_reason = $3, updated_at = now() WHERE id = $1`,
+        [t.id, actor.id, reason],
+      );
+      if (people.length) await db.query('INSERT INTO task_credits (task_id, user_id) SELECT $1, unnest($2::uuid[])', [t.id, people]);
+      await audit(db, { actorId: actor.id, action: 'task.closed', taskId: t.id, details: { reason, credited: people, duplicate_of: null, batch }, ip });
+      if (reason === 'mistake') {
+        const settled = await db.query(
+          `UPDATE flags SET resolved_at = now(), resolved_by = $2, resolution = 'closed' WHERE task_id = $1 AND resolved_at IS NULL RETURNING id`,
+          [t.id, actor.id],
+        );
+        for (const f of settled.rows) {
+          await audit(db, { actorId: actor.id, action: 'task.flag_resolved', taskId: t.id, details: { flag_id: f.id, resolution: 'closed' }, ip });
+        }
+      }
+      if (people.length) credited.push({ task: t, userIds: people });
+    }
+    await notifyBatch(db, { kind: 'credited', actor, items: credited });
+    return { batch, updated: open.map((t) => t.id), skipped };
+  });
+}
+
+// Undo one table action: only the person who did it, only for a short while,
+// and only on tasks nobody has changed since. Undoing writes new audit entries
+// (marked undo_of); nothing is deleted from the history.
+export const UNDO_MINUTES = 10;
+const FIELD_ACTIONS = ['task.moved', 'task.edited', 'task.closed', 'task.reopened'];
+
+export async function undoBatch(batch, actor, ip) {
+  return tx(async (db) => {
+    const { rows: events } = await db.query(
+      `SELECT id, task_id, action, details FROM audit_events
+       WHERE actor_id = $1 AND details->>'batch' = $2 AND at > now() - make_interval(mins => $3)
+         AND action IN ('task.moved', 'task.edited', 'task.closed')
+       ORDER BY id`,
+      [actor.id, batch, UNDO_MINUTES],
+    );
+    if (events.length === 0) return { expired: true, undone: [], changed: [] };
+    const ids = [...new Set(events.map((e) => e.task_id))];
+    const { rows: locked } = await db.query('SELECT * FROM tasks WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE', [ids]);
+    const tasks = new Map(locked.map((t) => [t.id, t]));
+    const { rows: later } = await db.query(
+      `SELECT id, task_id, details->>'batch' AS batch FROM audit_events
+       WHERE task_id = ANY($1::int[]) AND id > $2 AND action = ANY($3::text[])`,
+      [ids, events[0].id, FIELD_ACTIONS],
+    );
+    const undone = [];
+    const changed = [];
+    for (const e of events) {
+      const t = tasks.get(e.task_id);
+      const touchedSince = later.some((l) => l.task_id === e.task_id && l.id > e.id && l.batch !== batch);
+      const d = e.details || {};
+      const details = { undo_of: batch };
+      if (!t || touchedSince) {
+        changed.push(e.task_id);
+        continue;
+      }
+      if (e.action === 'task.closed') {
+        if (!t.closed_at) { changed.push(t.id); continue; }
+        await reopenInside(db, t, actor, ip, t.status, details);
+      } else if (t.closed_at) {
+        changed.push(t.id);
+        continue;
+      } else if (e.action === 'task.moved') {
+        await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [t.id, d.from]);
+        await audit(db, { actorId: actor.id, action: 'task.moved', taskId: t.id, details: { from: d.to, to: d.from, ...details }, ip });
+      } else {
+        const c = d.changes || {};
+        const back = {};
+        if (c.priority) {
+          await db.query('UPDATE tasks SET priority = $2 WHERE id = $1', [t.id, c.priority.from]);
+          back.priority = { from: c.priority.to, to: c.priority.from };
+        }
+        if (c.due_date) {
+          await db.query('UPDATE tasks SET due_date = $2 WHERE id = $1', [t.id, c.due_date.from]);
+          back.due_date = { from: c.due_date.to, to: c.due_date.from };
+        }
+        if (c.labels) {
+          for (const l of c.labels.added || []) await db.query('DELETE FROM task_labels WHERE task_id = $1 AND label_id = $2', [t.id, l]);
+          for (const l of c.labels.removed || []) await db.query('INSERT INTO task_labels (task_id, label_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [t.id, l]);
+          back.labels = { added: c.labels.removed || [], removed: c.labels.added || [] };
+        }
+        if (c.assignees) {
+          for (const u of c.assignees.added || []) await db.query('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = $2', [t.id, u]);
+          for (const u of c.assignees.removed || []) await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [t.id, u]);
+          back.assignees = { added: c.assignees.removed || [], removed: c.assignees.added || [] };
+        }
+        await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [t.id]);
+        await audit(db, { actorId: actor.id, action: 'task.edited', taskId: t.id, details: { changes: back, ...details }, ip });
+      }
+      undone.push(t.id);
+    }
+    return { expired: false, undone, changed: [...new Set(changed)] };
   });
 }
 

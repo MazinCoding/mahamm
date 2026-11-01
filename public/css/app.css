@@ -262,6 +262,17 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 .cell-menu .ribbon-buttons { gap: 6px; }
 .cell-menu-title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--muted); }
 
+/* Undo in a message, and the Done page for several tasks */
+.flash-undo { display: inline; margin-inline-start: 6px; }
+.flash-undo .btn-link { min-height: 0; padding: 0 4px; font-weight: 600; text-decoration: underline; }
+.close-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 8px; }
+.close-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.close-item:first-child { border-top: 0; }
+.close-item.is-missing { background: var(--bad-soft); }
+.close-item-title { min-width: 0; overflow-wrap: anywhere; }
+.close-item-credit .input { width: auto; max-width: 100%; }
+.close-item select[aria-invalid='true'] { border-color: var(--bad); }
+
 /* Task page */
 .task-head { border-bottom: 1px solid var(--border); padding-bottom: 16px; margin-bottom: 20px; }
 .task-head h1 { font-size: 26px; font-weight: 500; overflow-wrap: anywhere; }
