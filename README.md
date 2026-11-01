@@ -19,8 +19,10 @@ Stack: Node.js 22, Express 5, server-rendered Nunjucks templates, PostgreSQL. No
 2. In Render: **New → Blueprint**, connect GitHub, pick the repository, and click **Apply**. Render reads `render.yaml` and creates the web service and a private database in Frankfurt.
 3. When it asks for the `SMTP_*` values, leave them empty for now (see Email below).
 4. When the deploy is live, open **Environment** on the `mahamm` service and copy the value of `SETUP_TOKEN`.
-5. Visit `https://<your-service>.onrender.com/setup`, paste the token, and create the first admin account. Set up two-step verification when asked.
-6. Invite your coworkers from **People**. Without email set up, each invite link is shown once for you to send yourself.
+5. Visit `https://<your-service>.onrender.com/setup`, paste the token, and create the first admin account. Set up two-step verification when asked and save the recovery codes.
+6. Back in **Environment**, delete `SETUP_TOKEN` (the setup page is already switched off once an account exists).
+7. Invite your coworkers from **People**. Without email set up, each invite link is shown once for you to send yourself (WhatsApp works fine).
+8. Optional: **Import** your current Excel sheet. The preview shows exactly what will happen to each row before anything is saved.
 
 **Free plan limits (trial only).** The free web service sleeps after 15 minutes without visitors and takes about a minute to wake. The free database is deleted 30 days after creation (plus a 14-day grace period) and has no backups. Before people rely on it, upgrade both in the Render dashboard; the smallest paid web service is $7/month and the smallest paid database $6/month at the time of writing.
 
@@ -63,6 +65,10 @@ npm run dev
 ```
 
 Tests need a Postgres database they can wipe: `TEST_DATABASE_URL=postgres://… npm test`.
+
+For a demo with sample people and tasks, run `DEMO_PASSWORD=<12+ chars> npm run seed:demo` against an **empty development** database (it refuses to run in production). Accounts are `ahmed@example.com`, `fatma@example.com` and so on.
+
+GitHub Actions runs the tests, a browser walk-through with screenshots, `npm audit` and a full-history secret scan on every push; results are kept as a downloadable artifact for 14 days. See `SECURITY-AUDIT.md` for the security review.
 
 ## Backups
 

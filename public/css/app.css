@@ -233,7 +233,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fo
 
 /* Forms */
 .card-form { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; max-width: 860px; }
-.card-form h2.section-title:first-child { margin-top: 0; }
+.card-form .section-title { margin-top: 0; }
 .form { display: flex; flex-direction: column; gap: 14px; }
 .field { display: flex; flex-direction: column; gap: 6px; border: 0; margin: 0; padding: 0; min-width: 0; }
 .field > label, .field > legend { font-weight: 500; padding: 0; }
