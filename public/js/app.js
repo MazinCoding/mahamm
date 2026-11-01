@@ -188,6 +188,10 @@
           say((r.body && r.body.message) || msg('failed'), true);
           return;
         }
+        if (r.body.redirect) {
+          window.location.href = r.body.redirect;
+          return;
+        }
         // The page reloads to show the saved values; keep the selection and the brush.
         session.set(SEL_KEY, { path: here, ids: selectedIds() });
         window.location.reload();
@@ -346,6 +350,8 @@
       var reason = picked ? picked.value : 'completed';
       closeForm.querySelectorAll('[data-show-for]').forEach(function (block) {
         block.hidden = block.getAttribute('data-show-for') !== reason;
+        // Hidden choices aren't sent, so they can't get in the way of the chosen reason.
+        block.querySelectorAll('input, select, textarea').forEach(function (el) { el.disabled = block.hidden; });
       });
     };
     closeForm.addEventListener('change', sync);

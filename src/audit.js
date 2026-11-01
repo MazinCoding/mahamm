@@ -40,15 +40,16 @@ export function describe(ev, t, { names = {}, labels = {} } = {}) {
   const who = (id) => names[id] || t('common.formerUser');
   const list = (ids) => (ids || []).map(who).join(t('common.listSep'));
   const st = (s) => (s === 'done' ? t('status.done') : t(`status.${s}`));
+  const undo = d.undo_of ? t('ev.undo') : '';
   switch (ev.action) {
     case 'task.created': return t('ev.created');
     case 'task.imported': return t('ev.imported', { file: d.file || '' });
-    case 'task.moved': return t('ev.moved', { from: st(d.from), to: st(d.to) });
+    case 'task.moved': return t('ev.moved', { from: st(d.from), to: st(d.to) }) + undo;
     case 'task.closed':
       return d.reason === 'completed' && d.credited?.length
         ? t('ev.closedCredit', { people: list(d.credited) })
         : t('ev.closed', { reason: t(`reason.${d.reason}`) });
-    case 'task.reopened': return t('ev.reopened');
+    case 'task.reopened': return t('ev.reopened') + undo;
     case 'task.commented': return t('ev.commented');
     case 'task.attachment_added': return t('ev.attached', { file: d.file || '' });
     case 'task.attachment_removed': return t('ev.attachmentRemoved', { file: d.file || '' });
@@ -71,7 +72,7 @@ export function describe(ev, t, { names = {}, labels = {} } = {}) {
         if (field === 'description') return t('ev.fieldDescription');
         return field;
       });
-      return `${t('ev.edited')}: ${parts.join('; ')}`;
+      return `${t('ev.edited')}: ${parts.join('; ')}${undo}`;
     }
     case 'import.completed': return t('ev.importCompleted', { count: d.count ?? 0, skipped: d.skipped ?? 0, file: d.file || '' });
     case 'setup.completed': return t('ev.setup');

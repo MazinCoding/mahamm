@@ -7,14 +7,14 @@ import { safeLocalPath } from '../security.js';
 import { MAX_ATTACHMENT_BYTES, checkAttachment, uploadThenCsrf } from '../uploads.js';
 import {
   HttpError, OPEN_STATUSES, PAGE_SIZE, PRIORITIES, TABLE_DUE, TABLE_SORTS, addAttachment, addComment, boardStats, boardTasks,
-  bulkApply, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, listTasks, moveTask, removeAttachment,
-  reopenTask, resolveFlag, tableTasks, taskDetail, updateTask,
+  UNDO_MINUTES, bulkApply, bulkClose, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, listTasks,
+  moveTask, removeAttachment, reopenTask, resolveFlag, tableTasks, taskDetail, tasksToClose, undoBatch, updateTask,
 } from '../services/tasks.js';
 
 const TABLE_COLORS = ['status', 'priority', 'label', 'none'];
 import { activePeople, allPeopleNames } from '../services/users.js';
 import {
-  bulkSchema, closeSchema, commentSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
+  bulkCloseSchema, bulkIdsSchema, bulkSchema, closeSchema, commentSchema, undoSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
 } from '../validation.js';
 
 async function allLabels() {
@@ -33,8 +33,8 @@ async function loadTask(req) {
   return task;
 }
 
-const flash = (req, text, type = 'ok') => {
-  req.session.flash = { type, text };
+const flash = (req, text, type = 'ok', undo = null) => {
+  req.session.flash = undo ? { type, text, undo } : { type, text };
 };
 
 export default function taskRoutes(config) {
@@ -144,13 +144,22 @@ export default function taskRoutes(config) {
   // or a normal form post (with a redirect back) when JavaScript is off.
   r.post('/tasks/bulk', requireAuth, writeLimit, async (req, res) => {
     const json = req.is('application/json');
-    const backPath = safeLocalPath(req.body.back, '/table');
-    const back = /^\/table(\?|$)/.test(backPath) ? backPath : '/table';
+    const back = tableBack(req.body.back);
     const refuse = (key) => {
       if (json) return res.status(400).json({ ok: false, message: req.t(key) });
       flash(req, req.t(key), 'warn');
       return res.redirect(back);
     };
+    // "Done" always goes through the close page, so someone is credited for each task.
+    if (String(req.body.apply ?? '') === 'close') {
+      const picked = parse(bulkIdsSchema, req.body);
+      if (picked.errors) return refuse('table.selectFirst');
+      const p = new URLSearchParams();
+      for (const id of picked.data.ids) p.append('ids', String(id));
+      p.set('back', back);
+      const url = `/table/close?${p}`;
+      return json ? res.json({ ok: true, redirect: url }) : res.redirect(url);
+    }
     const result = parse(bulkSchema, req.body);
     if (result.errors) return refuse(result.errors.ids ? 'table.selectFirst' : 'table.invalid');
     const { ids, op, value } = result.data;
@@ -162,8 +171,85 @@ export default function taskRoutes(config) {
       throw err;
     }
     const text = await bulkMessage(req, op, value, outcome);
-    flash(req, text, outcome.updated.length ? 'ok' : 'warn');
+    flash(req, text, outcome.updated.length ? 'ok' : 'warn', outcome.updated.length ? outcome.batch : null);
     if (json) return res.json({ ok: true, updated: outcome.updated, skipped: outcome.skipped });
+    return res.redirect(back);
+  });
+
+  // "Done" for several tasks: a short page to pick the reason and, for Completed, who did each one.
+  const renderBulkClose = async (req, res, { ids, back, values, errors = {}, status = 200 }) => {
+    const tasks = await tasksToClose(ids);
+    const open = tasks.filter((t) => !t.closed_at);
+    if (open.length === 0) {
+      flash(req, req.t('bulkClose.nothing'), 'warn');
+      return res.redirect(back);
+    }
+    const people = await activePeople();
+    return res.status(status).render('tasks/bulk-close.njk', {
+      tasks: open, alreadyClosed: tasks.filter((t) => t.closed_at).map((t) => `#${t.id}`).join(req.t('common.listSep')),
+      people, back, values, errors,
+    });
+  };
+
+  r.get('/table/close', requireAuth, async (req, res) => {
+    const back = tableBack(req.query.back);
+    const picked = parse(bulkIdsSchema, { ids: req.query.ids });
+    if (picked.errors) {
+      flash(req, req.t('table.selectFirst'), 'warn');
+      return res.redirect(back);
+    }
+    return renderBulkClose(req, res, { ids: picked.data.ids, back, values: { reason: 'completed', credit: {} } });
+  });
+
+  r.post('/tasks/bulk/close', requireAuth, writeLimit, async (req, res) => {
+    const back = tableBack(req.body.back);
+    const result = parse(bulkCloseSchema, req.body);
+    const ids = parse(bulkIdsSchema, req.body);
+    if (ids.errors) {
+      flash(req, req.t('table.selectFirst'), 'warn');
+      return res.redirect(back);
+    }
+    const order = [].concat(req.body.ids || []).map(Number);
+    const sent = [].concat(req.body.credit ?? []);
+    const values = {
+      reason: ['completed', 'notneeded', 'mistake'].includes(req.body.reason) ? req.body.reason : 'completed',
+      credit: Object.fromEntries(order.map((id, i) => [id, String(sent[i] ?? '')])),
+    };
+    if (result.errors) return renderBulkClose(req, res, { ids: ids.data.ids, back, values, errors: { form: true }, status: 400 });
+    const credits = {};
+    result.data.ids.forEach((id, i) => {
+      if (result.data.credit[i]) credits[id] = result.data.credit[i];
+    });
+    let outcome;
+    try {
+      outcome = await bulkClose(ids.data.ids, { reason: result.data.reason, credits }, req.user, req.ip);
+    } catch (err) {
+      if (err instanceof HttpError && err.missing) {
+        return renderBulkClose(req, res, { ids: ids.data.ids, back, values, errors: { missing: err.missing }, status: 400 });
+      }
+      throw err;
+    }
+    const list = (xs) => xs.map((id) => `#${id}`).join(req.t('common.listSep'));
+    const parts = [req.t('table.result.closedN', { n: outcome.updated.length })];
+    if (outcome.skipped.closed.length) parts.push(req.t('table.result.closed', { list: list(outcome.skipped.closed) }));
+    if (outcome.skipped.missing.length) parts.push(req.t('table.result.missing', { list: list(outcome.skipped.missing) }));
+    flash(req, parts.join(' '), outcome.updated.length ? 'ok' : 'warn', outcome.updated.length ? outcome.batch : null);
+    return res.redirect(back);
+  });
+
+  // Undo the last table action (the flash message carries its batch id).
+  r.post('/tasks/bulk/undo', requireAuth, writeLimit, async (req, res) => {
+    const back = tableBack(req.body.back);
+    const result = parse(undoSchema, req.body);
+    const out = result.errors ? { expired: true } : await undoBatch(result.data.batch, req.user, req.ip);
+    if (out.expired) {
+      flash(req, req.t('undo.gone', { m: UNDO_MINUTES }), 'warn');
+      return res.redirect(back);
+    }
+    const list = (xs) => xs.map((id) => `#${id}`).join(req.t('common.listSep'));
+    const parts = [out.undone.length ? req.t('undo.done', { n: out.undone.length }) : req.t('undo.none')];
+    if (out.changed.length) parts.push(req.t('undo.changed', { list: list(out.changed) }));
+    flash(req, parts.join(' '), out.undone.length ? 'ok' : 'warn');
     return res.redirect(back);
   });
 
@@ -393,6 +479,12 @@ export default function taskRoutes(config) {
   });
 
   return r;
+}
+
+// Table actions only ever return to the table.
+function tableBack(value) {
+  const path = safeLocalPath(value, '/table');
+  return /^\/table(\?|$)/.test(path) ? path : '/table';
 }
 
 // "Tasks updated: 3. Bug added. Skipped (you can't edit them): #12, #15."

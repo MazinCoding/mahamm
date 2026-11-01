@@ -53,7 +53,15 @@
   </div>
 </header>
 <main id="main" class="container">
-  {% if flash %}<div class="flash flash-{{ flash.type }}" role="status">{{ flash.text }}</div>{% endif %}
+  {% if flash %}<div class="flash flash-{{ flash.type }}" role="status">{{ flash.text }}
+    {%- if flash.undo %}
+    <form method="post" action="/tasks/bulk/undo" class="inline flash-undo">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <input type="hidden" name="batch" value="{{ flash.undo }}">
+      <input type="hidden" name="back" value="{{ currentUrl }}">
+      <button class="btn btn-link btn-sm" type="submit">{{ t('undo.button') }}</button>
+    </form>
+    {%- endif %}</div>{% endif %}
   {% block content %}{% endblock %}
 </main>
 </body>

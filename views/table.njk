@@ -76,7 +76,7 @@
     <button class="sr-only" type="submit" name="apply" value="due" tabindex="-1" aria-hidden="true">{{ t('table.setDue') }}</button>
     <div class="ribbon-group" role="group" aria-labelledby="rg-status" data-group="status">
       <span class="ribbon-label" id="rg-status">{{ t('field.status') }}</span>
-      <div class="ribbon-buttons">{% for s in ['backlog', 'todo', 'progress', 'review'] %}<button class="rb s-{{ s }}" type="submit" name="apply" value="status:{{ s }}">{{ t('status.' + s) }}</button>{% endfor %}</div>
+      <div class="ribbon-buttons">{% for s in ['backlog', 'todo', 'progress', 'review'] %}<button class="rb s-{{ s }}" type="submit" name="apply" value="status:{{ s }}">{{ t('status.' + s) }}</button>{% endfor %}<button class="rb s-done" type="submit" name="apply" value="close">{{ t('table.doneButton') }}</button></div>
     </div>
     <div class="ribbon-group" role="group" aria-labelledby="rg-prio" data-group="priority">
       <span class="ribbon-label" id="rg-prio">{{ t('field.priority') }}</span>

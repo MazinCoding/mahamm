@@ -165,6 +165,23 @@ await step('table-ribbon', async () => {
   await shot(page, '06g-table-brush');
   await page.keyboard.press('Escape');
   note(`check: Esc turns the brush off = ${await page.getAttribute('[data-brush]', 'aria-pressed')}`);
+
+  // Done for two rows goes to the close page; then Undo reopens them.
+  await rows.nth(0).locator('.col-task .num').click();
+  await rows.nth(1).locator('.col-task .num').click({ modifiers: ['Shift'] });
+  const closing = await page.locator('.row-check:checked').evaluateAll((boxes) => boxes.map((b) => b.value));
+  await Promise.all([page.waitForURL('**/table/close?**'), page.click('button[name="apply"][value="close"]')]);
+  await shot(page, '06h-table-done-page');
+  for (const select of await page.locator('select[name="credit"]').all()) {
+    if ((await select.inputValue()) === '' && (await select.locator('option').first().innerText()).startsWith('Missing')) {
+      await select.selectOption({ index: 1 });
+    }
+  }
+  await Promise.all([page.waitForURL((url) => url.pathname === '/table'), page.click('form[action="/tasks/bulk/close"] button[type=submit]')]);
+  note(`check: after Done = ${(await page.locator('.flash').innerText()).trim().replace(/\s+/g, ' ')}`);
+  await shot(page, '06i-table-closed-with-undo');
+  await Promise.all([page.waitForEvent('load'), page.click('.flash-undo button')]);
+  note(`check: after Undo = ${(await page.locator('.flash').innerText()).trim()}; rows back = ${await page.locator(closing.map((id) => `tr[data-task-id="${id}"]`).join(', ')).count()}`);
 });
 
 // Excel import: upload a sheet with gaps and an unknown name.

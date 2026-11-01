@@ -191,11 +191,34 @@
       "assignee": {
         "added": "Assigned: {name}.",
         "removed": "Unassigned: {name}."
-      }
+      },
+      "closedN": "Tasks closed: {n}."
     },
     "selection": "Selection",
     "selectAll": "Select all on this page",
-    "selectNone": "Clear selection"
+    "selectNone": "Clear selection",
+    "doneButton": "Done…"
+  },
+  "bulkClose": {
+    "title": "Close selected tasks",
+    "sub": "Tasks: {n}",
+    "tasks": "Tasks",
+    "whoHint": "Each task credits its assignees unless you pick someone else.",
+    "whoFor": "Who did {n}",
+    "assignees": "Its assignees: {people}",
+    "missing": "Missing: pick who did it",
+    "missingError": "Pick who did the work for each task marked Missing, or choose another reason.",
+    "alreadyClosed": "Already closed, so left alone: {list}.",
+    "duplicateNote": "To close a task as a duplicate, use its own page so you can say which task it duplicates.",
+    "nothing": "The selected tasks are already closed.",
+    "submit": "Close tasks"
+  },
+  "undo": {
+    "button": "Undo",
+    "done": "Undone. Tasks restored: {n}.",
+    "none": "Nothing was undone.",
+    "changed": "Left as they are because someone changed them since: {list}.",
+    "gone": "Undo is no longer available. It lasts {m} minutes, and only for your own changes."
   },
   "task": {
     "new": "New task",
@@ -334,7 +357,8 @@
     "resetLink": "created a password reset link for {person}",
     "labelCreated": "created the label {name}",
     "labelUpdated": "updated the label {name}",
-    "auditExported": "exported the audit log ({rows} rows)"
+    "auditExported": "exported the audit log ({rows} rows)",
+    "undo": " (undo)"
   },
   "act": {
     "task": {
