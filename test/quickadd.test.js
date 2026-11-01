@@ -28,7 +28,7 @@ describe('quick-add row', () => {
   test('adds a task with just a title, in To do and Medium, and records who', async () => {
     const res = await quick(aishaAgent, { title: '  Order printer toner  ', status: 'todo' });
     assert.equal(res.status, 302);
-    assert.equal(res.headers.location, '/table#quick-add');
+    assert.equal(res.headers.location, '/table');
     const task = await latest();
     assert.deepEqual([task.title, task.status, task.priority, task.creator_id], ['Order printer toner', 'todo', 'med', aisha.id]);
     assert.equal((await auditFor(task.id))[0].action, 'task.created');
@@ -54,9 +54,9 @@ describe('quick-add row', () => {
     assert.match((await aishaAgent.get('/table')).text, /Titles can be up to 200 characters\./);
     assert.equal((await latest()).id, before);
     const away = await quick(aishaAgent, { title: 'Going nowhere', back: 'https://evil.example/' });
-    assert.equal(away.headers.location, '/table#quick-add');
+    assert.equal(away.headers.location, '/table');
     const keep = await quick(aishaAgent, { title: 'Keeps filters', back: '/table?sort=due&dir=asc' });
-    assert.equal(keep.headers.location, '/table?sort=due&dir=asc#quick-add');
+    assert.equal(keep.headers.location, '/table?sort=due&dir=asc');
   });
 
   test('needs a session and a CSRF token', async () => {

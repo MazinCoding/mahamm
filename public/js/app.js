@@ -342,8 +342,8 @@
     }
   }
 
-  // After a quick add the server marks the title box autofocus. Browsers skip
-  // autofocus when the address has a #fragment, so focus it here as well.
+  // After a quick add the server marks the title box autofocus; focusing it
+  // here as well also scrolls it into view in browsers that skip autofocus.
   var quickTitle = document.querySelector('#quick-title[autofocus]');
   if (quickTitle && document.activeElement !== quickTitle) quickTitle.focus();
 
