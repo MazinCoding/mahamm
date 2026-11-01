@@ -19,7 +19,16 @@
 
 <div class="stats">
   <div class="stat"><div class="stat-value">{{ stats.open }}</div><div class="stat-label">{{ t('board.statOpen') }}</div></div>
-  <div class="stat"><div class="stat-value{% if stats.progress > wipLimit %} is-warn{% endif %}">{{ stats.progress }} / {{ wipLimit }}</div><div class="stat-label">{{ t('board.statProgress') }}</div></div>
+  <div class="stat"><div class="stat-value{% if stats.progress > wipLimit %} is-bad{% endif %}">{{ stats.progress }} / {{ wipLimit }}</div><div class="stat-label">{{ t('board.statProgress') }}</div>
+    {% if user.isAdmin %}
+    <form class="wip-form" method="post" action="/board/wip-limit">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <label class="sr-only" for="wip-limit">{{ t('board.wipLabel') }}</label>
+      <input id="wip-limit" class="input input-sm input-num" type="number" name="limit" min="1" max="50" step="1" value="{{ wipLimit }}" required>
+      <button class="btn btn-secondary btn-sm" type="submit">{{ t('board.wipSave') }}</button>
+    </form>
+    {% endif %}
+  </div>
   <div class="stat"><div class="stat-value{% if stats.overdue %} is-bad{% endif %}">{{ stats.overdue }}</div><div class="stat-label">{{ t('board.statOverdue') }}</div></div>
   <div class="stat"><div class="stat-value">{{ stats.closed7 }}</div><div class="stat-label">{{ t('board.statClosed7') }}</div></div>
   <div class="stat"><div class="stat-value">{{ stats.cycle_days if stats.cycle_days else t('common.notEnoughData') }}</div><div class="stat-label">{{ t('board.statCycle') }}</div></div>

@@ -342,6 +342,12 @@
     }
   }
 
+  // After adding from the quick-add row, put the cursor back there for the next one.
+  if (window.location.hash === '#quick-add') {
+    var quickTitle = document.getElementById('quick-title');
+    if (quickTitle) quickTitle.focus();
+  }
+
   // Close form: show "who did it" only for Completed, "duplicate of" only for Duplicate.
   var closeForm = document.querySelector('[data-close-form]');
   if (closeForm) {

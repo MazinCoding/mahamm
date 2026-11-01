@@ -87,6 +87,14 @@ export const bulkIdsSchema = z.object({ ids: bulkIds });
 
 export const undoSchema = z.object({ batch: z.string().uuid() });
 
+// Quick-add row at the bottom of the table: a title, and the column it starts in.
+export const quickAddSchema = z.object({
+  title: z.preprocess(cleanLine, z.string().min(1).max(200)),
+  status: z.enum(['backlog', 'todo']).catch('todo'),
+});
+
+export const wipLimitSchema = z.object({ limit: z.coerce.number().int().min(1).max(50) });
+
 export const commentSchema = z.object({ body: z.preprocess(clean, z.string().min(1).max(5000)) });
 
 export const flagSchema = z.object({
