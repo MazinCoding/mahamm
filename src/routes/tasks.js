@@ -268,12 +268,14 @@ export default function taskRoutes(config) {
     if (result.errors) {
       const tooLong = String(req.body.title ?? '').trim().length > 200;
       flash(req, req.t(tooLong ? 'table.quickTooLong' : 'table.quickEmpty'), 'warn');
+      req.session.flash.focus = 'quick-add';
       return res.redirect(`${back}#quick-add`);
     }
     const task = await createTask({
       title: result.data.title, description: '', status: result.data.status, priority: 'med', due_date: '', labels: [], assignees: [],
     }, req.user, req.ip);
     flash(req, req.t('table.quickAdded', { n: `#${task.id}` }));
+    req.session.flash.focus = 'quick-add';
     return res.redirect(`${back}#quick-add`);
   });
 

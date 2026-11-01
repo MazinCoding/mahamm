@@ -34,7 +34,7 @@ describe('quick-add row', () => {
     assert.equal((await auditFor(task.id))[0].action, 'task.created');
     const page = await aishaAgent.get('/table');
     assert.match(page.text, new RegExp(`Added #${task.id}\\.`));
-    assert.match(page.text, /id="quick-title"/);
+    assert.match(page.text, /id="quick-title"[^>]* autofocus>/, 'the cursor goes back to the box for the next task');
   });
 
   test('starts in Backlog when the table is filtered to Backlog, and never anywhere else', async () => {

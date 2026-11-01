@@ -14,7 +14,7 @@
   <input type="hidden" name="back" value="{{ currentUrl }}">
   <input type="hidden" name="status" value="{{ 'backlog' if filters.status == 'backlog' else 'todo' }}">
   <label class="sr-only" for="quick-title">{{ t('table.quickLabel') }}</label>
-  <input id="quick-title" class="input input-sm" name="title" maxlength="200" dir="auto" placeholder="{{ t('table.quickPh') }}" autocomplete="off">
+  <input id="quick-title" class="input input-sm" name="title" maxlength="200" dir="auto" placeholder="{{ t('table.quickPh') }}" autocomplete="off"{% if flash and flash.focus == 'quick-add' %} autofocus{% endif %}>
   <button class="btn btn-secondary btn-sm" type="submit">{{ t('table.quickAdd') }}</button>
 </form>
 {% endmacro %}
