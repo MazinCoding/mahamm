@@ -1,0 +1,53 @@
+check: drag to In progress saved
+check: drag to Done opens /tasks/12/close
+[desktop] HTTP 404 http://localhost:3000/tasks/999999
+[desktop] console error: Failed to load resource: the server responded with a status of 404 (Not Found)
+check: after closing, audit record says closed by Ahmed, completed by Fatma
+check: html dir after switching language = rtl
+done: 0 failed steps, 2 problems logged
+
+--- server log ---
+{"level":30,"time":1793506070217,"port":3000,"msg":"mahamm listening"}
+{"level":30,"time":1793506072660,"req":{"id":"5fa3f793-f94d-40c0-8d73-5bc84af21cb6","method":"GET","url":"/login"},"res":{"statusCode":200},"responseTime":63,"msg":"request completed"}
+{"level":30,"time":1793506073684,"req":{"id":"abf22fec-a1ee-4db0-8fcb-36f19a508ae2","method":"POST","url":"/login"},"res":{"statusCode":302},"responseTime":50,"msg":"request completed"}
+{"level":30,"time":1793506073693,"req":{"id":"fe27668f-6250-42cb-b412-c78348ed02e2","method":"GET","url":"/login/two-factor"},"res":{"statusCode":200},"responseTime":7,"msg":"request completed"}
+{"level":30,"time":1793506074345,"req":{"id":"d17d922a-c225-4909-a6a2-b29afabacc8a","method":"POST","url":"/login/two-factor"},"res":{"statusCode":302},"responseTime":12,"msg":"request completed"}
+{"level":30,"time":1793506074401,"req":{"id":"46b01c03-3f49-41e9-bd7a-54b38aa3f110","method":"GET","url":"/board"},"res":{"statusCode":200},"responseTime":55,"msg":"request completed"}
+{"level":30,"time":1793506075209,"req":{"id":"15295e9d-40c9-4f6f-9457-80be9eb255c0","method":"POST","url":"/tasks/16/move"},"res":{"statusCode":200},"responseTime":18,"msg":"request completed"}
+{"level":30,"time":1793506075265,"req":{"id":"b2c68c41-5f7d-413a-9479-8b9435ee4399","method":"GET","url":"/board"},"res":{"statusCode":200},"responseTime":51,"msg":"request completed"}
+{"level":30,"time":1793506076578,"req":{"id":"4ca0854d-779d-4e1a-81a6-0b4c3dd9492d","method":"GET","url":"/tasks/12/close"},"res":{"statusCode":200},"responseTime":32,"msg":"request completed"}
+{"level":30,"time":1793506077292,"req":{"id":"50cc1fea-2245-49bd-97fa-eb5595c818b7","method":"GET","url":"/tasks"},"res":{"statusCode":200},"responseTime":66,"msg":"request completed"}
+{"level":30,"time":1793506078039,"req":{"id":"9633822b-9cba-4f9c-b5e0-490d06dda132","method":"GET","url":"/tasks?state=closed"},"res":{"statusCode":200},"responseTime":25,"msg":"request completed"}
+{"level":30,"time":1793506078730,"req":{"id":"4991dfed-b8bc-49e9-8569-e917e1a68259","method":"GET","url":"/tasks/7"},"res":{"statusCode":200},"responseTime":81,"msg":"request completed"}
+{"level":30,"time":1793506079409,"req":{"id":"315fd9ca-9d5e-4ca1-b743-f4327ae3aaee","method":"GET","url":"/tasks/10"},"res":{"statusCode":200},"responseTime":36,"msg":"request completed"}
+{"level":30,"time":1793506080082,"req":{"id":"4cf9bc41-204c-4d5b-83d2-aca4e2109ecd","method":"GET","url":"/tasks/20"},"res":{"statusCode":200},"responseTime":22,"msg":"request completed"}
+{"level":30,"time":1793506080744,"req":{"id":"ff574df1-4ac3-412c-81cc-97bea20265a8","method":"GET","url":"/tasks/13/flag"},"res":{"statusCode":200},"responseTime":19,"msg":"request completed"}
+{"level":30,"time":1793506081435,"req":{"id":"978a8545-b0a4-44e6-825a-705b324540c3","method":"GET","url":"/tasks/new"},"res":{"statusCode":200},"responseTime":43,"msg":"request completed"}
+{"level":30,"time":1793506082102,"req":{"id":"f3e56d4f-2ae4-484a-8800-897753750170","method":"GET","url":"/tasks/10/edit"},"res":{"statusCode":200},"responseTime":17,"msg":"request completed"}
+{"level":30,"time":1793506082759,"req":{"id":"33c92b3d-0db6-4967-b4e7-808c0c455d2e","method":"GET","url":"/audit"},"res":{"statusCode":200},"responseTime":25,"msg":"request completed"}
+{"level":30,"time":1793506083611,"req":{"id":"c6c5544b-d439-497d-8966-f320e4ecbaf5","method":"GET","url":"/people"},"res":{"statusCode":200},"responseTime":20,"msg":"request completed"}
+{"level":30,"time":1793506084268,"req":{"id":"1f64772e-7587-4d2c-8359-cc28a8866624","method":"GET","url":"/labels"},"res":{"statusCode":200},"responseTime":18,"msg":"request completed"}
+{"level":30,"time":1793506084901,"req":{"id":"c4a81938-b69e-4b45-a13b-c5f6f04fba3c","method":"GET","url":"/notifications"},"res":{"statusCode":200},"responseTime":9,"msg":"request completed"}
+{"level":30,"time":1793506085512,"req":{"id":"8324540c-050f-4853-b8c9-96946bc1b625","method":"GET","url":"/settings"},"res":{"statusCode":200},"responseTime":9,"msg":"request completed"}
+{"level":40,"time":1793506086147,"req":{"id":"8c5e6319-a2d9-4249-ae0f-19c889c2aacb","method":"GET","url":"/tasks/999999"},"status":404,"reason":"not found","msg":"request rejected"}
+{"level":30,"time":1793506086150,"req":{"id":"8c5e6319-a2d9-4249-ae0f-19c889c2aacb","method":"GET","url":"/tasks/999999"},"res":{"statusCode":404},"responseTime":8,"msg":"request completed"}
+{"level":30,"time":1793506086808,"req":{"id":"42ba292c-0964-4437-803b-8c905648673e","method":"GET","url":"/import"},"res":{"statusCode":200},"responseTime":19,"msg":"request completed"}
+{"level":30,"time":1793506087582,"req":{"id":"ec1c34fc-8bd1-439a-8279-20eeff70b579","method":"POST","url":"/import"},"res":{"statusCode":302},"responseTime":81,"msg":"request completed"}
+{"level":30,"time":1793506087602,"req":{"id":"8c08b603-5952-4dcc-aa22-01d04ada7e73","method":"GET","url":"/import/e764b034-797e-42b9-87d7-8c455c415ee6"},"res":{"statusCode":200},"responseTime":18,"msg":"request completed"}
+{"level":30,"time":1793506088291,"req":{"id":"d9b00f6c-c078-45a9-b9f9-bd9f175c2ce8","method":"GET","url":"/tasks/13/close"},"res":{"statusCode":200},"responseTime":23,"msg":"request completed"}
+{"level":30,"time":1793506088447,"req":{"id":"655e2319-47f2-450a-8f4c-1d0f631cb997","method":"POST","url":"/tasks/13/close"},"res":{"statusCode":302},"responseTime":14,"msg":"request completed"}
+{"level":30,"time":1793506088473,"req":{"id":"2a67b463-c83b-4a0d-8b7f-fe7e889a848b","method":"GET","url":"/tasks/13"},"res":{"statusCode":200},"responseTime":24,"msg":"request completed"}
+{"level":30,"time":1793506089110,"req":{"id":"5c21f504-3d56-4015-a78a-d5b37e6738f3","method":"GET","url":"/board"},"res":{"statusCode":200},"responseTime":21,"msg":"request completed"}
+{"level":30,"time":1793506089223,"req":{"id":"3f1620eb-77a2-48a6-bc04-6ff17f07956a","method":"POST","url":"/lang"},"res":{"statusCode":302},"responseTime":7,"msg":"request completed"}
+{"level":30,"time":1793506089243,"req":{"id":"05ab0f57-3e6b-4223-8dbb-50d065569f2b","method":"GET","url":"/board"},"res":{"statusCode":200},"responseTime":19,"msg":"request completed"}
+{"level":30,"time":1793506089911,"req":{"id":"0c75f179-ccf9-40e5-8bda-9b89843b2b20","method":"GET","url":"/tasks/7"},"res":{"statusCode":200},"responseTime":23,"msg":"request completed"}
+{"level":30,"time":1793506090575,"req":{"id":"5008e336-6c4a-4f50-8ae4-8ccceff99e80","method":"GET","url":"/tasks/10/close"},"res":{"statusCode":200},"responseTime":17,"msg":"request completed"}
+{"level":30,"time":1793506091189,"req":{"id":"c3d6ce26-52ad-4135-ad6d-0b23d3c790c9","method":"GET","url":"/audit"},"res":{"statusCode":200},"responseTime":15,"msg":"request completed"}
+{"level":30,"time":1793506092062,"req":{"id":"9ddcc03a-0fe4-459c-9e1a-559d5aab08e1","method":"GET","url":"/tasks"},"res":{"statusCode":200},"responseTime":15,"msg":"request completed"}
+{"level":30,"time":1793506092807,"req":{"id":"8acbfdc5-bc79-463d-a316-dc84c6e5adb4","method":"POST","url":"/lang"},"res":{"statusCode":302},"responseTime":8,"msg":"request completed"}
+{"level":30,"time":1793506092825,"req":{"id":"72c5b6d9-2a7d-417b-9b17-cc16378c2ea0","method":"GET","url":"/tasks"},"res":{"statusCode":200},"responseTime":17,"msg":"request completed"}
+{"level":30,"time":1793506093453,"req":{"id":"e94f9046-f5fd-4e8d-bb61-0b0fdd63fb6c","method":"GET","url":"/board"},"res":{"statusCode":200},"responseTime":29,"msg":"request completed"}
+{"level":30,"time":1793506094290,"req":{"id":"84bbc352-4864-4599-bb10-bf382a446c6e","method":"GET","url":"/tasks/10"},"res":{"statusCode":200},"responseTime":20,"msg":"request completed"}
+{"level":30,"time":1793506095036,"req":{"id":"2f664017-06f4-4078-a2cc-d6ee4f7c7da6","method":"GET","url":"/tasks"},"res":{"statusCode":200},"responseTime":16,"msg":"request completed"}
+{"level":30,"time":1793506095866,"req":{"id":"744d2fff-9f83-4da4-b403-8938d5f6c389","method":"GET","url":"/tasks/16/close"},"res":{"statusCode":200},"responseTime":13,"msg":"request completed"}
+{"level":30,"time":1793506096586,"req":{"id":"9f9a69c8-70cc-406b-9711-f5499a4d9c7f","method":"GET","url":"/login"},"res":{"statusCode":200},"responseTime":9,"msg":"request completed"}

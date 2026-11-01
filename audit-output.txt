@@ -1,0 +1,41 @@
+# npm audit report
+
+minimatch  <11.0.1
+Severity: moderate
+minimatch has potential denial of service via globparts amplification - https://github.com/advisories/GHSA-g3hv-75wg-m249
+fix available via `npm audit fix --force`
+Will install exceljs@4.1.1, which is a breaking change
+node_modules/minimatch
+node_modules/readdir-glob/node_modules/minimatch
+  glob  3.0.0 - 13.0.6
+  Depends on vulnerable versions of minimatch
+  node_modules/glob
+    archiver-utils  >=0.2.0
+    Depends on vulnerable versions of glob
+    node_modules/archiver-utils
+    node_modules/zip-stream/node_modules/archiver-utils
+      archiver  >=0.20.0
+      Depends on vulnerable versions of archiver-utils
+      Depends on vulnerable versions of readdir-glob
+      Depends on vulnerable versions of zip-stream
+      node_modules/archiver
+        exceljs  >=4.2.0
+        Depends on vulnerable versions of archiver
+        node_modules/exceljs
+      zip-stream  0.8.0 - 6.0.1
+      Depends on vulnerable versions of archiver-utils
+      node_modules/zip-stream
+    rimraf  2.3.0 - 3.0.2 || >=4.2.0
+    Depends on vulnerable versions of glob
+    node_modules/rimraf
+  readdir-glob  *
+  Depends on vulnerable versions of minimatch
+  node_modules/readdir-glob
+
+8 moderate severity vulnerabilities
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force

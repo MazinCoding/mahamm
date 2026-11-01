@@ -1,0 +1,410 @@
+
+> mahamm@1.0.0 test
+> node --test --test-concurrency=1 test/*.test.js
+
+TAP version 13
+# Subtest: first-run setup
+    # Subtest: needs the setup token, creates one admin, then disappears
+    ok 1 - needs the setup token, creates one admin, then disappears
+      ---
+      duration_ms: 198.824343
+      type: 'test'
+      ...
+    1..1
+ok 1 - first-run setup
+  ---
+  duration_ms: 336.884116
+  type: 'suite'
+  ...
+# Subtest: sign-in
+    # Subtest: protected pages redirect to sign-in
+    ok 1 - protected pages redirect to sign-in
+      ---
+      duration_ms: 10.609921
+      type: 'test'
+      ...
+    # Subtest: wrong password and unknown email give the same answer
+    ok 2 - wrong password and unknown email give the same answer
+      ---
+      duration_ms: 152.802539
+      type: 'test'
+      ...
+    # Subtest: five failures pause sign-in for that email and are audited
+    ok 3 - five failures pause sign-in for that email and are audited
+      ---
+      duration_ms: 222.437275
+      type: 'test'
+      ...
+    # Subtest: session cookie is HttpOnly and SameSite, and the id changes at sign-in
+    ok 4 - session cookie is HttpOnly and SameSite, and the id changes at sign-in
+      ---
+      duration_ms: 65.425395
+      type: 'test'
+      ...
+    # Subtest: posts without a CSRF token are refused
+    ok 5 - posts without a CSRF token are refused
+      ---
+      duration_ms: 71.479392
+      type: 'test'
+      ...
+    # Subtest: cross-site form posts are refused even with a token
+    ok 6 - cross-site form posts are refused even with a token
+      ---
+      duration_ms: 97.184744
+      type: 'test'
+      ...
+    # Subtest: sign-out ends the session
+    ok 7 - sign-out ends the session
+      ---
+      duration_ms: 129.05001
+      type: 'test'
+      ...
+    # Subtest: changing the password signs out other sessions
+    ok 8 - changing the password signs out other sessions
+      ---
+      duration_ms: 177.669512
+      type: 'test'
+      ...
+    1..8
+ok 2 - sign-in
+  ---
+  duration_ms: 929.5346
+  type: 'suite'
+  ...
+# Subtest: two-step verification
+    # Subtest: admins must set it up, codes cannot be replayed, recovery codes work once
+    ok 1 - admins must set it up, codes cannot be replayed, recovery codes work once
+      ---
+      duration_ms: 255.586785
+      type: 'test'
+      ...
+    1..1
+ok 3 - two-step verification
+  ---
+  duration_ms: 255.779113
+  type: 'suite'
+  ...
+# Subtest: invites and resets
+    # Subtest: invite links work once, enforce the password policy and are stored hashed
+    ok 1 - invite links work once, enforce the password policy and are stored hashed
+      ---
+      duration_ms: 224.840055
+      type: 'test'
+      ...
+    # Subtest: reset links work once and sign the person out everywhere
+    ok 2 - reset links work once and sign the person out everywhere
+      ---
+      duration_ms: 249.267535
+      type: 'test'
+      ...
+    # Subtest: forgot-password gives the same answer for unknown emails
+    ok 3 - forgot-password gives the same answer for unknown emails
+      ---
+      duration_ms: 50.402088
+      type: 'test'
+      ...
+    # Subtest: disabled people cannot sign in and lose their sessions
+    ok 4 - disabled people cannot sign in and lose their sessions
+      ---
+      duration_ms: 182.596604
+      type: 'test'
+      ...
+    1..4
+ok 4 - invites and resets
+  ---
+  duration_ms: 707.421929
+  type: 'suite'
+  ...
+# Subtest: reading spreadsheets
+    # Subtest: guesses columns from English and Arabic headers
+    ok 1 - guesses columns from English and Arabic headers
+      ---
+      duration_ms: 4.730316
+      type: 'test'
+      ...
+    # Subtest: maps status words, dates and names without guessing
+    ok 2 - maps status words, dates and names without guessing
+      ---
+      duration_ms: 5.781531
+      type: 'test'
+      ...
+    1..2
+ok 5 - reading spreadsheets
+  ---
+  duration_ms: 438.698706
+  type: 'suite'
+  ...
+# Subtest: import flow
+    # Subtest: previews missing values explicitly and imports with an audit trail
+    ok 1 - previews missing values explicitly and imports with an audit trail
+      ---
+      duration_ms: 231.257933
+      type: 'test'
+      ...
+    # Subtest: another admin cannot open someone else's import
+    ok 2 - another admin cannot open someone else's import
+      ---
+      duration_ms: 167.389435
+      type: 'test'
+      ...
+    # Subtest: rejects files that are not spreadsheets
+    ok 3 - rejects files that are not spreadsheets
+      ---
+      duration_ms: 31.591413
+      type: 'test'
+      ...
+    1..3
+ok 6 - import flow
+  ---
+  duration_ms: 430.792092
+  type: 'suite'
+  ...
+# Subtest: headers
+    # Subtest: security headers are set and the framework is not advertised
+    ok 1 - security headers are set and the framework is not advertised
+      ---
+      duration_ms: 16.579241
+      type: 'test'
+      ...
+    # Subtest: templates contain no inline scripts or styles
+    ok 2 - templates contain no inline scripts or styles
+      ---
+      duration_ms: 180.657753
+      type: 'test'
+      ...
+    # Subtest: errors are generic and do not leak stack traces
+    ok 3 - errors are generic and do not leak stack traces
+      ---
+      duration_ms: 18.96926
+      type: 'test'
+      ...
+    1..3
+ok 7 - headers
+  ---
+  duration_ms: 698.115498
+  type: 'suite'
+  ...
+# Subtest: uploads
+    # Subtest: files are checked by content, not by name
+    ok 1 - files are checked by content, not by name
+      ---
+      duration_ms: 136.040849
+      type: 'test'
+      ...
+    # Subtest: uploads need a CSRF token and only go to upload routes
+    ok 2 - uploads need a CSRF token and only go to upload routes
+      ---
+      duration_ms: 100.914045
+      type: 'test'
+      ...
+    # Subtest: only the uploader or an admin can remove a file, and it stays in the audit log
+    ok 3 - only the uploader or an admin can remove a file, and it stays in the audit log
+      ---
+      duration_ms: 124.954985
+      type: 'test'
+      ...
+    1..3
+ok 8 - uploads
+  ---
+  duration_ms: 362.592189
+  type: 'suite'
+  ...
+# Subtest: audit log
+    # Subtest: the database refuses to change or delete audit entries
+    ok 1 - the database refuses to change or delete audit entries
+      ---
+      duration_ms: 31.100502
+      type: 'test'
+      ...
+    # Subtest: members see task history only; admins also see account events
+    ok 2 - members see task history only; admins also see account events
+      ---
+      duration_ms: 30.674871
+      type: 'test'
+      ...
+    # Subtest: CSV export neutralises spreadsheet formulas
+    ok 3 - CSV export neutralises spreadsheet formulas
+      ---
+      duration_ms: 41.094094
+      type: 'test'
+      ...
+    1..3
+ok 9 - audit log
+  ---
+  duration_ms: 103.466458
+  type: 'suite'
+  ...
+# Subtest: helpers
+    # Subtest: config fails fast and names the missing variables only
+    ok 1 - config fails fast and names the missing variables only
+      ---
+      duration_ms: 4.287
+      type: 'test'
+      ...
+    # Subtest: the onrender.com address stays allowed after a custom domain is set
+    ok 2 - the onrender.com address stays allowed after a custom domain is set
+      ---
+      duration_ms: 2.017736
+      type: 'test'
+      ...
+    # Subtest: redirect targets must be local paths
+    ok 3 - redirect targets must be local paths
+      ---
+      duration_ms: 0.905124
+      type: 'test'
+      ...
+    # Subtest: password policy
+    ok 4 - password policy
+      ---
+      duration_ms: 1.302976
+      type: 'test'
+      ...
+    # Subtest: breach check sends only a hash prefix and fails open
+    ok 5 - breach check sends only a hash prefix and fails open
+      ---
+      duration_ms: 1.358549
+      type: 'test'
+      ...
+    1..5
+ok 10 - helpers
+  ---
+  duration_ms: 10.253566
+  type: 'suite'
+  ...
+# Subtest: the shared board
+    # Subtest: any signed-in person can create a task; the audit log records who
+    ok 1 - any signed-in person can create a task; the audit log records who
+      ---
+      duration_ms: 126.206989
+      type: 'test'
+      ...
+    # Subtest: the person closing can credit someone else, and both are recorded
+    ok 2 - the person closing can credit someone else, and both are recorded
+      ---
+      duration_ms: 108.515924
+      type: 'test'
+      ...
+    # Subtest: closing as completed needs at least one person
+    ok 3 - closing as completed needs at least one person
+      ---
+      duration_ms: 56.673585
+      type: 'test'
+      ...
+    # Subtest: moving by drag and drop uses JSON with the CSRF header and is audited
+    ok 4 - moving by drag and drop uses JSON with the CSRF header and is audited
+      ---
+      duration_ms: 120.172524
+      type: 'test'
+      ...
+    # Subtest: requests with the headers a real browser sends are accepted from the site itself only
+    ok 5 - requests with the headers a real browser sends are accepted from the site itself only
+      ---
+      duration_ms: 54.730888
+      type: 'test'
+      ...
+    # Subtest: moving to Review notifies the creator by email
+    ok 6 - moving to Review notifies the creator by email
+      ---
+      duration_ms: 52.397544
+      type: 'test'
+      ...
+    # Subtest: only the creator, an assignee or an admin can edit; edits keep the old text
+    ok 7 - only the creator, an assignee or an admin can edit; edits keep the old text
+      ---
+      duration_ms: 106.624467
+      type: 'test'
+      ...
+    # Subtest: request bodies cannot set protected fields
+    ok 8 - request bodies cannot set protected fields
+      ---
+      duration_ms: 21.922647
+      type: 'test'
+      ...
+    # Subtest: anyone can flag a task; only the creator or an admin can resolve it
+    ok 9 - anyone can flag a task; only the creator or an admin can resolve it
+      ---
+      duration_ms: 165.958641
+      type: 'test'
+      ...
+    # Subtest: closing as created-by-mistake settles open flags
+    ok 10 - closing as created-by-mistake settles open flags
+      ---
+      duration_ms: 58.513557
+      type: 'test'
+      ...
+    # Subtest: reopening clears the closure but keeps it in the audit log
+    ok 11 - reopening clears the closure but keeps it in the audit log
+      ---
+      duration_ms: 63.292155
+      type: 'test'
+      ...
+    # Subtest: comments are escaped, not rendered as HTML, and mentions notify
+    ok 12 - comments are escaped, not rendered as HTML, and mentions notify
+      ---
+      duration_ms: 64.135515
+      type: 'test'
+      ...
+    # Subtest: titles with HTML are escaped on the board and in the list
+    ok 13 - titles with HTML are escaped on the board and in the list
+      ---
+      duration_ms: 55.175786
+      type: 'test'
+      ...
+    # Subtest: list search, filters and paging use parameters safely
+    ok 14 - list search, filters and paging use parameters safely
+      ---
+      duration_ms: 20.315779
+      type: 'test'
+      ...
+    # Subtest: notifications can only be opened by their owner
+    ok 15 - notifications can only be opened by their owner
+      ---
+      duration_ms: 31.076896
+      type: 'test'
+      ...
+    # Subtest: Arabic pages render right-to-left
+    ok 16 - Arabic pages render right-to-left
+      ---
+      duration_ms: 55.551976
+      type: 'test'
+      ...
+    # Subtest: emails were queued with escaped content
+    ok 17 - emails were queued with escaped content
+      ---
+      duration_ms: 1.924302
+      type: 'test'
+      ...
+    1..17
+ok 11 - the shared board
+  ---
+  duration_ms: 1703.792258
+  type: 'suite'
+  ...
+# Subtest: admin-only areas
+    # Subtest: members are refused, admins allowed
+    ok 1 - members are refused, admins allowed
+      ---
+      duration_ms: 126.045918
+      type: 'test'
+      ...
+    # Subtest: the last admin cannot be demoted or disabled
+    ok 2 - the last admin cannot be demoted or disabled
+      ---
+      duration_ms: 27.454833
+      type: 'test'
+      ...
+    1..2
+ok 12 - admin-only areas
+  ---
+  duration_ms: 153.788167
+  type: 'suite'
+  ...
+1..12
+# tests 52
+# suites 12
+# pass 52
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8756.656371
