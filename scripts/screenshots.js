@@ -189,7 +189,8 @@ await step('table-quick-add', async () => {
   await page.goto(`${base}/table`);
   await page.fill('#quick-title', 'Check the fire extinguishers on every floor');
   await Promise.all([page.waitForEvent('load'), page.press('#quick-title', 'Enter')]);
-  note(`check: quick-add = ${(await page.locator('.flash').innerText()).trim()}; cursor back in the box = ${await page.evaluate(() => document.activeElement?.id)}`);
+  const focus = await page.evaluate(() => ({ id: document.activeElement?.id, hash: window.location.hash, hasFocus: document.hasFocus(), auto: !!document.querySelector('#quick-title[autofocus]') }));
+  note(`check: quick-add = ${(await page.locator('.flash').innerText()).trim()}; cursor back in the box = ${focus.id || 'no'} (address ${focus.hash || 'no fragment'}, window focused ${focus.hasFocus}, autofocus marked ${focus.auto})`);
   await shot(page, '06j-table-quick-add');
   await page.goto(`${base}/board`);
   const before = await page.inputValue('#wip-limit');
