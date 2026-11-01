@@ -147,10 +147,11 @@ await step('table-ribbon', async () => {
   note(`check: rows selected after shift-click = ${await page.locator('.row-check:checked').count()}`);
   await shot(page, '06e-table-selected');
   const picked = await page.locator('.row-check:checked').evaluateAll((boxes) => boxes.map((b) => b.value));
-  await Promise.all([page.waitForEvent('load'), page.click('button[name="apply"][value="priority:high"]')]);
-  const prios = [];
-  for (const id of picked) prios.push((await page.locator(`tr[data-task-id="${id}"] [data-field="priority"]`).innerText()).trim());
-  note(`check: priority after ribbon = ${prios.join(', ')}; message = ${(await page.locator('.flash').innerText()).trim()}`);
+  await page.fill('#rb-due', '2026-12-31');
+  await Promise.all([page.waitForEvent('load'), page.click('.ribbon-buttons button[name="apply"][value="due"]')]);
+  const dues = [];
+  for (const id of picked) dues.push((await page.locator(`tr[data-task-id="${id}"] [data-field="due"]`).innerText()).trim());
+  note(`check: due dates after ribbon = ${dues.join(', ')}; message = ${(await page.locator('.flash').innerText()).trim()}`);
   note(`check: rows still selected after saving = ${await page.locator('.row-check:checked').count()}`);
   await rows.nth(1).locator('[data-field="status"]').click();
   await page.waitForSelector('.cell-menu');
