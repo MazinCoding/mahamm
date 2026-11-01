@@ -5,7 +5,7 @@
 <a class="back" href="/board"><svg class="flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>{{ t('task.backToBoard') }}</a>
 
 <div class="task-head">
-  <h1>{{ task.title }} <span class="num-lg">#{{ task.id }}</span></h1>
+  <h1><bdi>{{ task.title }}</bdi> <span class="num-lg">#{{ task.id }}</span></h1>
   <div class="task-head-meta">
     {% if not task.closed_at %}
       <span class="pill pill-open">{{ t('state.open') }}</span>
@@ -25,7 +25,7 @@
 <div class="flag-banner" role="note">
   <div class="flag-banner-text">
     <strong>{{ t('flag.bannerTitle', { p: f.flagged_by_name, reason: t('flagReason.' + f.reason) }) }}</strong>
-    {% if f.note %}<p class="pre">{{ f.note }}</p>{% endif %}
+    {% if f.note %}<p class="pre" dir="auto">{{ f.note }}</p>{% endif %}
     <span class="muted small">{{ fmt.ago(f.created_at) }}</span>
   </div>
   {% if canResolve %}
@@ -51,7 +51,7 @@
       {{ m.avatar({ id: task.creator_id, name: task.creator_name }, 'av-lg') }}
       <div class="post-box">
         <div class="post-head"><strong>{{ task.creator_name }}</strong> <span class="muted">{{ fmt.ago(task.created_at) }}</span>{% if task.imported %} <span class="chip c-gray">{{ t('task.imported') }}</span>{% endif %}</div>
-        <div class="post-body pre">{% if task.description %}{{ task.description }}{% else %}<em class="muted">{{ t('task.noDescription') }}</em>{% endif %}</div>
+        <div class="post-body pre" dir="auto">{% if task.description %}{{ task.description }}{% else %}<em class="muted">{{ t('task.noDescription') }}</em>{% endif %}</div>
       </div>
     </div>
 
@@ -62,7 +62,7 @@
         {{ m.avatar({ id: item.actorId, name: item.actorName }, 'av-lg') }}
         <div class="post-box">
           <div class="post-head"><strong>{{ item.actorName }}</strong> <time class="muted" datetime="{{ fmt.iso(item.at) }}" title="{{ fmt.dateTime(item.at) }}">{{ fmt.ago(item.at) }}</time></div>
-          <div class="post-body pre">{{ item.body }}</div>
+          <div class="post-body pre" dir="auto">{{ item.body }}</div>
         </div>
       </li>
       {% else %}
@@ -79,7 +79,7 @@
       <div class="post-box">
         <input type="hidden" name="_csrf" value="{{ csrfToken }}">
         <label class="sr-only" for="body">{{ t('comment.label') }}</label>
-        <textarea id="body" name="body" rows="4" maxlength="5000" required placeholder="{{ t('comment.placeholder') }}"></textarea>
+        <textarea id="body" name="body" dir="auto" rows="4" maxlength="5000" required placeholder="{{ t('comment.placeholder') }}"></textarea>
         <p class="hint">{{ t('comment.mentionHint') }}</p>
         <div class="composer-actions">
           {% if task.closed_at %}

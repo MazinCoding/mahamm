@@ -14,7 +14,7 @@
   {% for n in items %}
   <a class="notice{% if not n.read_at %} is-unread{% endif %}" href="/notifications/{{ n.id }}">
     <span class="notice-text">{{ t('notify.' + n.kind, { actor: n.actor_name or appName, n: '#' + n.task_id, title: n.title }) }}</span>
-    <span class="notice-title">#{{ n.task_id }} · {{ n.title }}</span>
+    <span class="notice-title">#{{ n.task_id }} · <bdi>{{ n.title }}</bdi></span>
     <span class="small muted">{{ fmt.ago(n.created_at) }}{% if not n.read_at %} · <strong>{{ t('notifications.new') }}</strong>{% endif %}</span>
   </a>
   {% else %}

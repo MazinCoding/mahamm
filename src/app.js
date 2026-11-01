@@ -28,7 +28,8 @@ export function avatarClass(id) {
 
 export function initials(name, lang) {
   const parts = String(name || '?').trim().split(/\s+/);
-  if (lang === 'ar' || /[؀-ۿ]/.test(parts[0] || '')) return (parts[0] || '?').charAt(0);
+  // One letter for names written in Arabic script; two Latin initials otherwise, in either language.
+  if (/[؀-ۿ]/.test(parts[0] || '')) return (parts[0] || '?').charAt(0);
   const last = parts.length > 1 ? parts[parts.length - 1].replace(/^al-/i, '') : '';
   return `${parts[0].charAt(0)}${last.charAt(0)}`.toUpperCase();
 }

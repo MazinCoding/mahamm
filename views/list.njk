@@ -45,7 +45,7 @@
     <span class="row-icon">{{ m.stateIcon(task) }}</span>
     <div class="row-main">
       <div class="row-title-line">
-        <a class="row-title" href="/tasks/{{ task.id }}">{{ task.title }}</a>
+        <a class="row-title" dir="auto" href="/tasks/{{ task.id }}">{{ task.title }}</a>
         {% for l in task.labels %}{{ m.label(l) }}{% endfor %}
         {% if task.open_flags %}<span class="chip c-red">{{ t('flag.flagged') }}</span>{% endif %}
       </div>

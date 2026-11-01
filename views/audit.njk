@@ -36,7 +36,7 @@
         <td class="nowrap"><time datetime="{{ fmt.iso(e.at) }}">{{ fmt.dateTime(e.at) }}</time><br><span class="small muted">{{ fmt.ago(e.at) }}</span></td>
         <td class="nowrap">{% if e.actor_id %}<span class="person">{{ m.avatar({ id: e.actor_id, name: e.actor_name }) }}<span>{{ e.actor_name }}</span></span>{% else %}<span class="muted">{{ t('common.system') }}</span>{% endif %}</td>
         <td><span class="chip g-{{ e.group }}{% if e.action == 'auth.signin_paused' %} c-red{% endif %}">{{ t('act.' + e.action) }}</span></td>
-        <td>{% if e.task_id %}<a class="strong" href="/tasks/{{ e.task_id }}">#{{ e.task_id }}</a> <span class="muted">{{ e.task_title }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if e.task_id %}<a class="strong" href="/tasks/{{ e.task_id }}">#{{ e.task_id }}</a> <bdi class="muted">{{ e.task_title }}</bdi>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td>{{ e.text }}{% if user.isAdmin and e.ip and e.group == 'account' %}<br><span class="small muted">{{ t('audit.ip', { ip: e.ip }) }}</span>{% endif %}</td>
       </tr>
       {% else %}

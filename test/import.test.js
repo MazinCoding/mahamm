@@ -67,7 +67,7 @@ describe('import flow', () => {
     assert.match(review.text, /Skipped · same title as row 3/);
     assert.match(review.text, /No account for: Hamed/);
 
-    const runForm = review.text.match(/<form class="form-actions sticky-actions"[\s\S]*?<\/form>/)[0];
+    const runForm = review.text.match(/<form class="form-actions run-bar"[\s\S]*?<\/form>/)[0];
     const fields = Object.fromEntries([...runForm.matchAll(/name="(map_[a-z_]+)" value="(\d+)"/g)].map((m) => [m[1], m[2]]));
     const run = await adminAgent.post(`${jobUrl}/run`).type('form').send({ _csrf: csrfIn(review.text), ...fields });
     assert.equal(run.status, 302);

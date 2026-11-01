@@ -31,7 +31,7 @@
       {{ prio(task.priority) }}
     </span>
   </div>
-  <a class="card-title stretch" href="/tasks/{{ task.id }}">{{ task.title }}</a>
+  <a class="card-title stretch" dir="auto" href="/tasks/{{ task.id }}">{{ task.title }}</a>
   {% if task.labels.length %}<div class="chips">{% for l in task.labels %}{{ label(l) }}{% endfor %}</div>{% endif %}
   {% if task.closed_at %}<div class="closed-line{% if task.close_reason == 'completed' %} is-done{% endif %}">{{ closedLine(task) }}</div>{% endif %}
   <div class="card-foot">

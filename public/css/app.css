@@ -258,13 +258,16 @@ textarea.input { resize: vertical; }
 .radio-card:has(input:checked) { border-color: var(--accent); background: #f2f8f7; }
 .radio-card input { margin-top: 3px; accent-color: var(--accent); }
 .form-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
-.inline-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; max-width: none; }
+.inline-form { display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 12px; max-width: none; }
 .inline-form .field.grow { flex: 1 1 260px; }
 .inline-form .full { flex-basis: 100%; }
 .copy-row { display: flex; gap: 8px; margin: 6px 0 12px; }
 .map-grid { display: grid; grid-template-columns: minmax(140px, 220px) minmax(0, 1fr); gap: 8px 14px; align-items: center; margin: 12px 0; }
 .map-label { font-weight: 500; }
-.sticky-actions { position: sticky; bottom: 0; background: var(--bg); padding: 12px 0; }
+.run-bar { margin: 0 0 16px; }
+input[type='file'] { font-size: 13px; max-width: 100%; }
+input[type='file']::file-selector-button { font: inherit; font-weight: 500; min-height: 34px; padding: 0 12px; margin-inline-end: 10px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--text); cursor: pointer; }
+input[type='file']::file-selector-button:hover { background: var(--column); }
 .stepper { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
 .stepper li { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px 6px 6px; border-radius: 999px; background: var(--surface); color: var(--muted); font-weight: 500; font-size: 13px; border: 1px solid var(--border); }
 .stepper li span { width: 24px; height: 24px; border-radius: 50%; background: #eef1f4; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }

@@ -10,12 +10,12 @@
   <input type="hidden" name="_csrf" value="{{ csrfToken }}">
   <div class="field">
     <label for="title">{{ t('field.title') }}</label>
-    <input id="title" class="input" type="text" name="title" value="{{ values.title }}" maxlength="200" required {% if errors.title %}aria-invalid="true" aria-describedby="err-title"{% endif %}>
+    <input id="title" class="input" type="text" name="title" dir="auto" value="{{ values.title }}" maxlength="200" required {% if errors.title %}aria-invalid="true" aria-describedby="err-title"{% endif %}>
     {{ m.field_error(errors, 'title') }}
   </div>
   <div class="field">
     <label for="description">{{ t('field.description') }} <span class="muted">({{ t('common.optional') }})</span></label>
-    <textarea id="description" class="input" name="description" rows="6" maxlength="10000">{{ values.description }}</textarea>
+    <textarea id="description" class="input" name="description" dir="auto" rows="6" maxlength="10000">{{ values.description }}</textarea>
     {{ m.field_error(errors, 'description') }}
   </div>
   <div class="grid-3">
