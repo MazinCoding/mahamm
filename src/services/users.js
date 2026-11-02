@@ -45,6 +45,16 @@ export async function addPerson(name, actor, ip) {
   });
 }
 
+// Used by the Excel import: reuses an active person with exactly this name
+// (ignoring case), otherwise adds them without an account.
+export async function findOrAddPerson(db, name, actor, ip, details = {}) {
+  const { rows } = await db.query(`SELECT id FROM users WHERE status = 'active' AND lower(name) = lower($1)`, [name]);
+  if (rows[0]) return { id: rows[0].id, added: false };
+  const created = (await db.query(`INSERT INTO users (name, email_notifications) VALUES ($1, false) RETURNING id`, [name])).rows[0];
+  await audit(db, { actorId: actor.id, action: 'person.added', subjectUserId: created.id, details: { name, ...details }, ip });
+  return { id: created.id, added: true };
+}
+
 // Only names of people without an account; people with one set their own.
 export async function renamePerson(userId, name, actor, ip) {
   return tx(async (db) => {

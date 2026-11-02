@@ -709,8 +709,8 @@
       "dupRow": "Skipped · same title as row {row}"
     },
     "warn": {
-      "unmatched": "No account for: {names}. Imported unassigned and noted in the description.",
-      "unmatchedDone": "No account for: {names}. Noted in the description.",
+      "unmatched": "Matches nobody on the People list: {names}. Imported unassigned and noted in the description, unless you add them below.",
+      "unmatchedDone": "Matches nobody on the People list: {names}. Noted in the description, unless you add them below.",
       "noDate": "No created date. Today’s date is used.",
       "badDue": "Due date couldn’t be read, so it’s left empty.",
       "noCredit": "Marked done, but who did it isn’t recorded."
@@ -726,7 +726,15 @@
     "runHint": "Each imported task gets its own audit entry naming you as the person who imported it.",
     "run": "Import {n} tasks",
     "done": "Imported {n} tasks. {skipped} rows were skipped.",
-    "empty": "Empty"
+    "empty": "Empty",
+    "newPeople": {
+      "title": "Names that match nobody ({n})",
+      "hint": "Tick the people to add without an account. They’ll be assigned and credited on the rows that name them, and you can invite them later from People. Fix the name first if the sheet shortens it.",
+      "rows": "on {n} rows",
+      "addAs": "Add {name} as",
+      "badName": "Each ticked name needs 1 to 100 characters. Nothing was imported.",
+      "done": "Added {n} people without accounts."
+    }
   },
   "email": {
     "openTask": "Open task",

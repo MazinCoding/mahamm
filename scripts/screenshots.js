@@ -221,6 +221,7 @@ await step('import', async () => {
   await page.click('form[action="/import"] button[type=submit]');
   await page.waitForURL('**/import/**', { timeout: 10000 });
   await shot(page, '20-import-review');
+  note(`check: names offered to add as people = ${(await page.locator('.new-person bdi').allInnerTexts()).join(', ') || 'none'}`);
 });
 
 // People without accounts: add by name, pick them as an assignee, then invite them.

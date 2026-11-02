@@ -5,6 +5,10 @@ import { audit } from '../audit.js';
 import { one, q, tx } from '../db.js';
 import { clean, cleanLine } from '../validation.js';
 import { HttpError } from './tasks.js';
+import { findOrAddPerson } from './users.js';
+
+// The review page offers to add at most this many unmatched names as people.
+export const MAX_NEW_PEOPLE = 50;
 
 export const MAX_ROWS = 2000;
 const MAX_COLS = 40;
@@ -244,6 +248,20 @@ export async function buildPreview(job, mapping, people) {
       },
     };
   });
+  // Names that match nobody, across the rows that will be imported, most used first.
+  const unmatched = new Map();
+  for (const r of rows) {
+    if (r.kind === 'skip') continue;
+    for (const name of [...r.task.unmatchedAssignee, ...r.task.unmatchedCredits]) {
+      const k = name.toLowerCase();
+      if (!unmatched.has(k)) unmatched.set(k, { text: name.slice(0, 100), rows: new Set() });
+      unmatched.get(k).rows.add(r.rowNumber);
+    }
+  }
+  const unmatchedNames = [...unmatched.values()]
+    .map((u) => ({ text: u.text, rows: u.rows.size }))
+    .sort((a, b) => b.rows - a.rows || a.text.localeCompare(b.text))
+    .slice(0, MAX_NEW_PEOPLE);
   const counts = {
     total: rows.length,
     ready: rows.filter((r) => r.kind !== 'skip').length,
@@ -251,15 +269,38 @@ export async function buildPreview(job, mapping, people) {
     dupes: rows.filter((r) => r.key === 'import.res.dupExisting' || r.key === 'import.res.dupRow').length,
     warnings: rows.filter((r) => r.kind === 'warn').length,
   };
-  return { rows, counts };
+  return { rows, counts, unmatchedNames };
 }
 
-export async function runImport(job, preview, actor, ip, t) {
+// `additions` are names from the sheet the admin chose to add as people
+// without accounts: [{ from: text in the sheet, name: name to add them as }].
+export async function runImport(job, preview, actor, ip, t, additions = []) {
   const importable = preview.rows.filter((r) => r.kind !== 'skip');
   const count = await tx(async (db) => {
+    const added = new Map();
+    let peopleAdded = 0;
+    for (const a of additions) {
+      const person = await findOrAddPerson(db, a.name, actor, ip, { import: job.filename });
+      if (person.added) peopleAdded += 1;
+      added.set(a.from.toLowerCase(), person.id);
+    }
+    const resolve = (ids, names) => {
+      const out = [...ids];
+      const left = [];
+      for (const name of names) {
+        const id = added.get(name.toLowerCase());
+        if (!id) left.push(name);
+        else if (!out.includes(id)) out.push(id);
+      }
+      return { ids: out, left };
+    };
     let n = 0;
     for (const row of importable) {
-      const it = row.task;
+      const owners = resolve(row.task.assignees, row.task.unmatchedAssignee);
+      const doers = resolve(row.task.credits, row.task.unmatchedCredits);
+      const it = {
+        ...row.task, assignees: owners.ids, unmatchedAssignee: owners.left, credits: doers.ids, unmatchedCredits: doers.left,
+      };
       const extra = [];
       if (it.unmatchedAssignee.length) extra.push(t('import.note.owner', { names: it.unmatchedAssignee.join(', ') }));
       if (it.unmatchedCredits.length) extra.push(t('import.note.doneBy', { names: it.unmatchedCredits.join(', ') }));
@@ -284,7 +325,9 @@ export async function runImport(job, preview, actor, ip, t) {
       }
       n += 1;
     }
-    await audit(db, { actorId: actor.id, action: 'import.completed', details: { file: job.filename, count: n, skipped: preview.rows.length - n }, ip });
+    const details = { file: job.filename, count: n, skipped: preview.rows.length - n };
+    if (peopleAdded) details.people_added = peopleAdded;
+    await audit(db, { actorId: actor.id, action: 'import.completed', details, ip });
     await db.query('DELETE FROM import_jobs WHERE id = $1', [job.id]);
     return n;
   });
