@@ -96,6 +96,17 @@ export const quickAddSchema = z.object({
 // Home composer: just what you're working on.
 export const mineSchema = z.object({ title: z.preprocess(cleanLine, z.string().min(1).max(200)) });
 
+// Home details sheet after the composer: everything is chosen first, then sent once.
+export const detailsSchema = z.object({
+  status: z.enum(['backlog', 'todo', 'progress', 'review', 'done']),
+  priority: z.enum(['high', 'med', 'low']),
+  labels: z.preprocess(toArray, z.array(z.coerce.number().int().positive().max(999999999)).max(50)),
+  assignees: z.preprocess(toArray, z.array(z.string().uuid()).max(50)),
+  add_assignee: z.preprocess(clean, z.union([z.literal(''), z.string().uuid()])),
+  due_when: z.enum(['none', 'today', 'tomorrow', 'date']),
+  due_date: z.preprocess(clean, z.union([z.literal(''), isoDate])),
+}).refine((v) => v.due_when !== 'date' || v.due_date !== '', { path: ['due_date'], message: 'pick a date' });
+
 export const wipLimitSchema = z.object({ limit: z.coerce.number().int().min(1).max(50) });
 
 export const commentSchema = z.object({ body: z.preprocess(clean, z.string().min(1).max(5000)) });

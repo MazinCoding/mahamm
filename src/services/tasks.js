@@ -273,43 +273,69 @@ export async function createTask(data, actor, ip, file = null) {
 }
 
 export async function updateTask(id, data, actor, ip) {
+  return tx(async (db) => ({ changed: await applyEdit(db, await lockTask(db, id), data, actor, ip) }));
+}
+
+// Shared by the edit form and Home's details sheet: work out what changed, save it,
+// and write one `task.edited` entry (plus `extra`, such as a batch id for Undo).
+async function applyEdit(db, current, data, actor, ip, extra = {}) {
+  const { id } = current;
+  const changes = {};
+  for (const field of ['title', 'description', 'priority']) {
+    if (data[field] !== current[field]) changes[field] = { from: current[field], to: data[field] };
+  }
+  const due = data.due_date || null;
+  if (due !== (current.due_date || null)) changes.due_date = { from: current.due_date || null, to: due };
+
+  const before = (await db.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
+  // New assignees must be active; people already assigned stay if still ticked, even if since disabled.
+  const keep = before.filter((u) => data.assignees.includes(u));
+  const finalAssignees = [...new Set([...keep, ...(await activeIds(db, data.assignees))])];
+  const added = finalAssignees.filter((u) => !before.includes(u));
+  const removed = before.filter((u) => !finalAssignees.includes(u));
+  if (added.length || removed.length) changes.assignees = { added, removed };
+
+  const labelsBefore = (await db.query('SELECT label_id FROM task_labels WHERE task_id = $1', [id])).rows.map((r) => r.label_id);
+  const labelsAfter = await existingLabelIds(db, data.labels);
+  const lAdded = labelsAfter.filter((l) => !labelsBefore.includes(l));
+  const lRemoved = labelsBefore.filter((l) => !labelsAfter.includes(l));
+  if (lAdded.length || lRemoved.length) changes.labels = { added: lAdded, removed: lRemoved };
+
+  if (Object.keys(changes).length === 0) return false;
+
+  await db.query(
+    `UPDATE tasks SET title = $2, description = $3, priority = $4, due_date = $5, updated_at = now() WHERE id = $1`,
+    [id, data.title, data.description, data.priority, due],
+  );
+  if (removed.length) await db.query('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = ANY($2::uuid[])', [id, removed]);
+  if (added.length) await db.query('INSERT INTO task_assignees (task_id, user_id) SELECT $1, unnest($2::uuid[])', [id, added]);
+  if (lRemoved.length) await db.query('DELETE FROM task_labels WHERE task_id = $1 AND label_id = ANY($2::int[])', [id, lRemoved]);
+  if (lAdded.length) await db.query('INSERT INTO task_labels (task_id, label_id) SELECT $1, unnest($2::int[])', [id, lAdded]);
+  if (changes.description) changes.description = { changed: true, from_length: current.description.length, to_length: data.description.length, previous: current.description };
+  await audit(db, { actorId: actor.id, action: 'task.edited', taskId: id, details: { changes, ...extra }, ip });
+  if (added.length) await notify(db, { kind: 'assigned', taskId: id, task: { title: data.title }, actor, userIds: added });
+  return true;
+}
+
+// Home details sheet: a new status and the editable fields in one go. All entries
+// share a batch id, so the Undo in the message takes the whole lot back.
+export async function saveDetails(id, data, actor, ip) {
+  const batch = randomUUID();
   return tx(async (db) => {
     const current = await lockTask(db, id);
-    const changes = {};
-    for (const field of ['title', 'description', 'priority']) {
-      if (data[field] !== current[field]) changes[field] = { from: current[field], to: data[field] };
+    if (current.closed_at) throw new HttpError(409, 'task closed');
+    let moved = false;
+    if (data.status && data.status !== current.status) {
+      await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [id, data.status]);
+      await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: current.status, to: data.status, batch }, ip });
+      if (data.status === 'review') await notify(db, { kind: 'review', taskId: id, task: current, actor, userIds: [current.creator_id] });
+      moved = true;
     }
-    const due = data.due_date || null;
-    if (due !== (current.due_date || null)) changes.due_date = { from: current.due_date || null, to: due };
-
-    const before = (await db.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
-    // New assignees must be active; people already assigned stay if still ticked, even if since disabled.
-    const keep = before.filter((u) => data.assignees.includes(u));
-    const finalAssignees = [...new Set([...keep, ...(await activeIds(db, data.assignees))])];
-    const added = finalAssignees.filter((u) => !before.includes(u));
-    const removed = before.filter((u) => !finalAssignees.includes(u));
-    if (added.length || removed.length) changes.assignees = { added, removed };
-
-    const labelsBefore = (await db.query('SELECT label_id FROM task_labels WHERE task_id = $1', [id])).rows.map((r) => r.label_id);
-    const labelsAfter = await existingLabelIds(db, data.labels);
-    const lAdded = labelsAfter.filter((l) => !labelsBefore.includes(l));
-    const lRemoved = labelsBefore.filter((l) => !labelsAfter.includes(l));
-    if (lAdded.length || lRemoved.length) changes.labels = { added: lAdded, removed: lRemoved };
-
-    if (Object.keys(changes).length === 0) return { changed: false };
-
-    await db.query(
-      `UPDATE tasks SET title = $2, description = $3, priority = $4, due_date = $5, updated_at = now() WHERE id = $1`,
-      [id, data.title, data.description, data.priority, due],
-    );
-    if (removed.length) await db.query('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = ANY($2::uuid[])', [id, removed]);
-    if (added.length) await db.query('INSERT INTO task_assignees (task_id, user_id) SELECT $1, unnest($2::uuid[])', [id, added]);
-    if (lRemoved.length) await db.query('DELETE FROM task_labels WHERE task_id = $1 AND label_id = ANY($2::int[])', [id, lRemoved]);
-    if (lAdded.length) await db.query('INSERT INTO task_labels (task_id, label_id) SELECT $1, unnest($2::int[])', [id, lAdded]);
-    if (changes.description) changes.description = { changed: true, from_length: current.description.length, to_length: data.description.length, previous: current.description };
-    await audit(db, { actorId: actor.id, action: 'task.edited', taskId: id, details: { changes }, ip });
-    if (added.length) await notify(db, { kind: 'assigned', taskId: id, task: { title: data.title }, actor, userIds: added });
-    return { changed: true };
+    const edited = await applyEdit(db, current, {
+      title: current.title, description: current.description, priority: data.priority,
+      due_date: data.due_date, labels: data.labels, assignees: data.assignees,
+    }, actor, ip, { batch });
+    return { changed: moved || edited, batch };
   });
 }
 

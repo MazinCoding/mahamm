@@ -499,24 +499,43 @@ input[type='file']::file-selector-button:hover { background: var(--column); }
 .composer-input::placeholder { color: var(--muted); }
 .composer-send { flex: none; width: 42px; height: 42px; border: 0; border-radius: 50%; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
 .composer-send:hover { background: var(--accent-hover); }
-.added-panel { display: flex; flex-direction: column; gap: 14px; padding: 16px; background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; }
+.added-panel { background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; overflow: hidden; }
+
+/* Details for the task just added: inline on Home without JavaScript, a sheet with it.
+   The chips are radio buttons and checkboxes; a chosen chip turns solid with a tick. */
+.added-form { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.added-head { flex: none; padding: 14px 16px 6px; }
+.sheet-grip { display: none; }
 .added-head h2 { margin: 0; font-size: 16px; }
 .added-head h2:focus { outline: none; }
-.added-head .hint { margin-top: 4px; }
-.added-task { margin: 4px 0 0; font-weight: 500; overflow-wrap: anywhere; }
-.added-form { display: flex; flex-direction: column; gap: 14px; }
-.added-form .ribbon-buttons { gap: 6px; }
-.added-form .rb { min-height: 36px; padding: 0 12px; font-size: 13px; }
-.added-form .ribbon-status { min-height: 18px; }
-.added-people { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 4px; }
-.added-people .missing, .added-form .missing { font-style: italic; color: var(--muted); }
-.added-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-dialog.sheet { width: min(560px, 100%); max-width: 100%; max-height: 100%; padding: 0; border: 0; background: transparent; overflow: visible; }
+.added-task { margin: 2px 0 0; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.added-head .hint { margin: 2px 0 0; }
+.added-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 8px 16px 14px; }
+.pick-group { min-width: 0; margin: 0; padding: 0; border: 0; }
+.pick-group legend { padding: 0; margin-bottom: 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.pick-row { display: flex; align-items: center; gap: 6px; padding: 2px; margin: -2px; overflow-x: auto; scrollbar-width: none; }
+.pick-row::-webkit-scrollbar { display: none; }
+.pick-wrap { flex-wrap: wrap; overflow: visible; }
+.pick { position: relative; flex: none; display: inline-flex; align-items: center; gap: 5px; min-height: 36px; padding: 0 12px; border: 1px solid rgba(27, 31, 36, .14); border-radius: 999px; font-size: 13px; font-weight: 500; white-space: nowrap; cursor: pointer; user-select: none; -webkit-tap-highlight-color: transparent; }
+:where(.pick) { background: var(--surface); color: var(--text); }
+.pick.s-backlog { background: #eef1f4; color: #3d4752; }
+.pick:has(input:checked) { background: var(--accent); border-color: var(--accent); color: #fff; }
+.pick:has(input:checked)::before { content: '✓'; font-weight: 700; }
+.pick:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pick-select { width: auto; max-width: 210px; min-height: 36px; border-radius: 999px; }
+.pick-date { display: inline-flex; align-items: center; gap: 6px; }
+.pick-date .input { width: auto; min-width: 140px; min-height: 36px; }
+.added-foot { flex: none; display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--surface); }
+.added-foot .btn { flex: 1 1 0; min-height: 44px; }
+dialog.sheet { width: min(520px, calc(100% - 32px)); max-width: 100%; max-height: min(80vh, 680px); padding: 0; border: 0; border-radius: 16px; background: var(--surface); color: var(--text); overflow: hidden; box-shadow: 0 12px 40px rgba(27, 31, 36, .25); }
+dialog.sheet[open] { display: flex; flex-direction: column; }
 dialog.sheet::backdrop { background: rgba(27, 31, 36, .45); }
-dialog.sheet .added-panel { max-height: 88vh; overflow-y: auto; border-color: var(--border); box-shadow: 0 12px 40px rgba(27, 31, 36, .2); }
+dialog.sheet .added-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; border: 0; border-radius: 0; }
 @media (max-width: 720px) {
   .home.has-composer { padding-bottom: 76px; }
   .composer-bar { bottom: calc(74px + env(safe-area-inset-bottom)); width: calc(100% - 24px); }
-  dialog.sheet { width: 100%; margin: auto 0 0; }
-  dialog.sheet .added-panel { border-radius: 16px 16px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  /* On phones the sheet rises from the bottom and never takes more than three quarters of the screen. */
+  dialog.sheet { width: 100%; max-height: 75vh; max-height: 75dvh; margin: auto 0 0; border-radius: 18px 18px 0 0; }
+  dialog.sheet .sheet-grip { display: block; width: 36px; height: 4px; margin: 0 auto 10px; border-radius: 2px; background: var(--border-strong); }
+  dialog.sheet .added-foot { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
 }

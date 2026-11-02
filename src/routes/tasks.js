@@ -7,7 +7,7 @@ import { safeLocalPath } from '../security.js';
 import { MAX_ATTACHMENT_BYTES, checkAttachment, uploadThenCsrf } from '../uploads.js';
 import {
   HttpError, OPEN_STATUSES, PAGE_SIZE, PRIORITIES, TABLE_DUE, TABLE_SORTS, addAttachment, addComment, boardStats, boardTasks,
-  UNDO_MINUTES, bulkApply, bulkClose, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, joinTask, listTasks,
+  UNDO_MINUTES, bulkApply, bulkClose, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, joinTask, listTasks, saveDetails,
   moveTask, removeAttachment, reopenTask, resolveFlag, tableTasks, taskDetail, tasksToClose, undoBatch, updateTask,
 } from '../services/tasks.js';
 
@@ -15,7 +15,7 @@ const TABLE_COLORS = ['status', 'priority', 'label', 'none'];
 import { getWipLimit, inProgressCount, setWipLimit } from '../services/settings.js';
 import { activePeople, allPeopleNames } from '../services/users.js';
 import {
-  bulkCloseSchema, bulkIdsSchema, bulkSchema, closeSchema, commentSchema, mineSchema, quickAddSchema, undoSchema, wipLimitSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
+  bulkCloseSchema, bulkIdsSchema, bulkSchema, closeSchema, commentSchema, detailsSchema, mineSchema, quickAddSchema, undoSchema, wipLimitSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
 } from '../validation.js';
 
 async function allLabels() {
@@ -179,8 +179,6 @@ export default function taskRoutes(config) {
       const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(config.wipLimit)]);
       if (count > limit) text += ` ${req.t('table.result.overWip', { n: count, limit })}`;
     }
-    // The details pop-up on Home shows the result itself, so it asks for no message on the next page.
-    if (json && req.body.quiet === true) return res.json({ ok: true, updated: outcome.updated, skipped: outcome.skipped, message: text });
     flash(req, text, outcome.updated.length ? 'ok' : 'warn', outcome.updated.length ? outcome.batch : null);
     if (json) return res.json({ ok: true, updated: outcome.updated, skipped: outcome.skipped });
     return res.redirect(back);
@@ -299,6 +297,52 @@ export default function taskRoutes(config) {
     if (count > limit) text += ` ${req.t('table.result.overWip', { n: count, limit })}`;
     flash(req, text, count > limit ? 'warn' : 'ok');
     return res.redirect(`/home?added=${task.id}`);
+  });
+
+  // Home details sheet after the composer: status, priority, labels, people and due
+  // date, chosen first and saved together. Needs the usual edit rights.
+  r.post('/tasks/:id/details', requireAuth, writeLimit, async (req, res) => {
+    const task = await loadTask(req);
+    if (!canEdit(req.user, task)) throw new HttpError(403, 'not allowed');
+    const n = `#${task.id}`;
+    if (task.closed_at) {
+      flash(req, req.t('details.closed', { n }), 'warn');
+      return res.redirect('/home');
+    }
+    const result = parse(detailsSchema, req.body);
+    if (result.errors) {
+      flash(req, req.t(result.errors.due_date ? 'details.pickDate' : 'details.invalid'), 'warn');
+      return res.redirect(`/home?added=${task.id}`);
+    }
+    const d = result.data;
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(new Date());
+    const tomorrow = new Date(`${today}T12:00:00Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const due = { none: '', today, tomorrow: tomorrow.toISOString().slice(0, 10), date: d.due_date }[d.due_when];
+    let out;
+    try {
+      out = await saveDetails(task.id, {
+        status: d.status === 'done' ? null : d.status,
+        priority: d.priority,
+        labels: d.labels,
+        assignees: d.add_assignee ? [...d.assignees, d.add_assignee] : d.assignees,
+        due_date: due,
+      }, req.user, req.ip);
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 409) {
+        flash(req, req.t('details.closed', { n }), 'warn');
+        return res.redirect('/home');
+      }
+      throw err;
+    }
+    // Done goes through the close page, so someone is credited, as everywhere else.
+    if (d.status === 'done') {
+      if (out.changed) flash(req, req.t('details.saved', { n }));
+      return res.redirect(`/table/close?ids=${task.id}&back=%2Fhome`);
+    }
+    if (out.changed) flash(req, req.t('details.saved', { n }), 'ok', out.batch);
+    else flash(req, req.t('task.noChanges'));
+    return res.redirect('/home');
   });
 
   // Join a task from Home: adds you as an assignee. Anyone can join any open task.
@@ -564,11 +608,10 @@ export default function taskRoutes(config) {
 
 // Table actions only ever return to the table.
 // Where table actions (and the same actions on Home) return to: the table, with
-// its filters, Home (with the task just added), or the full list of suggested
-// tasks. Anything else goes back to the table.
+// its filters, Home, or the full list of suggested tasks. Anything else goes back to the table.
 function tableBack(value) {
   const path = safeLocalPath(value, '/table');
-  return /^\/table(\?|$)/.test(path) || /^\/(home(\?added=\d{1,9})?|suggested(\?page=\d{1,4})?)$/.test(path) ? path : '/table';
+  return /^\/table(\?|$)/.test(path) || /^\/(home|suggested(\?page=\d{1,4})?)$/.test(path) ? path : '/table';
 }
 
 // "Tasks updated: 3. Bug added. Skipped (you can't edit them): #12, #15."
