@@ -1,0 +1,29 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('home.suggested') }}{% endblock %}
+
+{% block content %}
+<div class="home">
+  <div>
+    <a class="back" href="/home"><svg class="flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>{{ t('nav.home') }}</a>
+    <h1>{{ t('home.suggested') }}</h1>
+    <p class="sub">{{ t('home.suggestedSub', { n: suggested.total }) }}</p>
+  </div>
+
+  <section class="widget" aria-label="{{ t('home.suggested') }}">
+    {% if suggested.rows.length %}
+    <ul class="my-list">{% for task in suggested.rows %}{{ m.suggestCard(task, today, back) }}{% endfor %}</ul>
+    {% else %}
+    <p class="widget-empty">{{ t('home.suggestedEmpty') }}</p>
+    {% endif %}
+  </section>
+
+  {% if prevUrl or nextUrl %}
+  <nav class="pager" aria-label="{{ t('list.pages') }}">
+    {% if prevUrl %}<a class="btn btn-secondary btn-sm" href="{{ prevUrl }}">{{ t('list.prev') }}</a>{% endif %}
+    <span>{{ t('list.pageOf', { page: page, pages: pages }) }}</span>
+    {% if nextUrl %}<a class="btn btn-secondary btn-sm" href="{{ nextUrl }}">{{ t('list.next') }}</a>{% endif %}
+  </nav>
+  {% endif %}
+</div>
+{% endblock %}

@@ -54,8 +54,10 @@ describe('My tasks', () => {
     await post(adminAgent, `/tasks/${closed}/close`, { reason: 'completed', credited: aisha.id, duplicate_of: '' }, `/tasks/${closed}/close`);
     await makeTask(aishaAgent, { title: 'Created but not assigned', status: 'todo' });
 
-    const html = (await aishaAgent.get('/home')).text;
-    assert.match(html, /Hello, <bdi>Aisha<\/bdi>/);
+    const page = (await aishaAgent.get('/home')).text;
+    assert.match(page, /Hello, <bdi>Aisha<\/bdi>/);
+    // Other open tasks show under Suggested tasks; only the My tasks section counts here.
+    const html = page.slice(page.indexOf('id="mine-title"'));
     assert.match(html, /Aisha todo task/);
     assert.match(html, /Aisha doing task/);
     assert.doesNotMatch(html, /Said only task/);

@@ -7,7 +7,7 @@ import { safeLocalPath } from '../security.js';
 import { MAX_ATTACHMENT_BYTES, checkAttachment, uploadThenCsrf } from '../uploads.js';
 import {
   HttpError, OPEN_STATUSES, PAGE_SIZE, PRIORITIES, TABLE_DUE, TABLE_SORTS, addAttachment, addComment, boardStats, boardTasks,
-  UNDO_MINUTES, bulkApply, bulkClose, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, listTasks,
+  UNDO_MINUTES, bulkApply, bulkClose, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, joinTask, listTasks,
   moveTask, removeAttachment, reopenTask, resolveFlag, tableTasks, taskDetail, tasksToClose, undoBatch, updateTask,
 } from '../services/tasks.js';
 
@@ -15,7 +15,7 @@ const TABLE_COLORS = ['status', 'priority', 'label', 'none'];
 import { getWipLimit, inProgressCount, setWipLimit } from '../services/settings.js';
 import { activePeople, allPeopleNames } from '../services/users.js';
 import {
-  bulkCloseSchema, bulkIdsSchema, bulkSchema, closeSchema, commentSchema, quickAddSchema, undoSchema, wipLimitSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
+  bulkCloseSchema, bulkIdsSchema, bulkSchema, closeSchema, commentSchema, mineSchema, quickAddSchema, undoSchema, wipLimitSchema, editTaskSchema, flagSchema, idParam, moveSchema, newTaskSchema, parse, uuidParam,
 } from '../validation.js';
 
 async function allLabels() {
@@ -179,6 +179,8 @@ export default function taskRoutes(config) {
       const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(config.wipLimit)]);
       if (count > limit) text += ` ${req.t('table.result.overWip', { n: count, limit })}`;
     }
+    // The details pop-up on Home shows the result itself, so it asks for no message on the next page.
+    if (json && req.body.quiet === true) return res.json({ ok: true, updated: outcome.updated, skipped: outcome.skipped, message: text });
     flash(req, text, outcome.updated.length ? 'ok' : 'warn', outcome.updated.length ? outcome.batch : null);
     if (json) return res.json({ ok: true, updated: outcome.updated, skipped: outcome.skipped });
     return res.redirect(back);
@@ -277,6 +279,46 @@ export default function taskRoutes(config) {
     flash(req, req.t('table.quickAdded', { n: `#${task.id}` }));
     req.session.flash.focus = 'quick-add';
     return res.redirect(back);
+  });
+
+  // Home composer: "what are you working on?" The task starts In progress and
+  // assigned to you; Home then offers the table's buttons to add details.
+  r.post('/tasks/mine', requireAuth, writeLimit, async (req, res) => {
+    const result = parse(mineSchema, req.body);
+    if (result.errors) {
+      const typed = String(req.body.title ?? '');
+      flash(req, req.t(typed.trim().length > 200 ? 'table.quickTooLong' : 'table.quickEmpty'), 'warn');
+      req.session.flash.draft = typed.slice(0, 1000);
+      return res.redirect('/home');
+    }
+    const task = await createTask({
+      title: result.data.title, description: '', status: 'progress', priority: 'med', due_date: '', labels: [], assignees: [req.user.id],
+    }, req.user, req.ip);
+    let text = req.t('home.added', { n: `#${task.id}` });
+    const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(config.wipLimit)]);
+    if (count > limit) text += ` ${req.t('table.result.overWip', { n: count, limit })}`;
+    flash(req, text, count > limit ? 'warn' : 'ok');
+    return res.redirect(`/home?added=${task.id}`);
+  });
+
+  // Join a task from Home: adds you as an assignee. Anyone can join any open task.
+  r.post('/tasks/:id/join', requireAuth, writeLimit, async (req, res) => {
+    const id = taskId(req);
+    const back = tableBack(req.body.back);
+    const home = back.startsWith('/table') ? '/home' : back;
+    let out;
+    try {
+      out = await joinTask(id, req.user, req.ip);
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 409) {
+        flash(req, req.t('join.closed', { n: `#${id}` }), 'warn');
+        return res.redirect(home);
+      }
+      throw err;
+    }
+    if (out.joined) flash(req, req.t('join.done', { n: `#${id}` }), 'ok', out.batch);
+    else flash(req, req.t('join.already', { n: `#${id}` }), 'warn');
+    return res.redirect(home);
   });
 
   // Admins set the in-progress limit. Going over it only warns; nothing is blocked.
@@ -522,10 +564,11 @@ export default function taskRoutes(config) {
 
 // Table actions only ever return to the table.
 // Where table actions (and the same actions on Home) return to: the table, with
-// its filters, or Home. Anything else goes back to the table.
+// its filters, Home (with the task just added), or the full list of suggested
+// tasks. Anything else goes back to the table.
 function tableBack(value) {
   const path = safeLocalPath(value, '/table');
-  return /^\/table(\?|$)/.test(path) || path === '/home' ? path : '/table';
+  return /^\/table(\?|$)/.test(path) || /^\/(home(\?added=\d{1,9})?|suggested(\?page=\d{1,4})?)$/.test(path) ? path : '/table';
 }
 
 // "Tasks updated: 3. Bug added. Skipped (you can't edit them): #12, #15."

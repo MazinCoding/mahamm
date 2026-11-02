@@ -480,3 +480,43 @@ input[type='file']::file-selector-button:hover { background: var(--column); }
   .tab-link.is-active { color: var(--accent-ink); font-weight: 600; }
   .tab-link.is-active svg { background: var(--accent-soft); }
 }
+
+/* Home: suggested tasks with a Join button */
+.suggest-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.suggest-people { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--muted); }
+.suggest-people .missing { font-style: italic; }
+.suggest-people .avatars .av { width: 24px; height: 24px; }
+.join-btn { min-width: 84px; min-height: 36px; }
+.home .back { margin-bottom: 6px; }
+
+/* Home: the composer pinned at the bottom, and the details pop-up after sending */
+.home.has-composer { padding-bottom: 84px; }
+.composer-bar { position: fixed; z-index: 35; inset-inline: 0; bottom: 16px; width: min(720px, calc(100% - 32px)); margin: 0 auto; display: flex; align-items: center; gap: 8px; padding-block: 6px; padding-inline: 16px 6px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px; box-shadow: 0 6px 24px rgba(27, 31, 36, .12); }
+.composer-bar:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft), 0 6px 24px rgba(27, 31, 36, .12); }
+/* 16px keeps phones from zooming in when the box is tapped. */
+.composer-input { flex: 1 1 auto; min-width: 0; min-height: 40px; padding: 0; border: 0; background: transparent; font-size: 16px; }
+.composer-input:focus { outline: none; }
+.composer-input::placeholder { color: var(--muted); }
+.composer-send { flex: none; width: 42px; height: 42px; border: 0; border-radius: 50%; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; }
+.composer-send:hover { background: var(--accent-hover); }
+.added-panel { display: flex; flex-direction: column; gap: 14px; padding: 16px; background: var(--surface); border: 1px solid var(--accent); border-radius: 14px; }
+.added-head h2 { margin: 0; font-size: 16px; }
+.added-head h2:focus { outline: none; }
+.added-head .hint { margin-top: 4px; }
+.added-task { margin: 4px 0 0; font-weight: 500; overflow-wrap: anywhere; }
+.added-form { display: flex; flex-direction: column; gap: 14px; }
+.added-form .ribbon-buttons { gap: 6px; }
+.added-form .rb { min-height: 36px; padding: 0 12px; font-size: 13px; }
+.added-form .ribbon-status { min-height: 18px; }
+.added-people { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 4px; }
+.added-people .missing, .added-form .missing { font-style: italic; color: var(--muted); }
+.added-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+dialog.sheet { width: min(560px, 100%); max-width: 100%; max-height: 100%; padding: 0; border: 0; background: transparent; overflow: visible; }
+dialog.sheet::backdrop { background: rgba(27, 31, 36, .45); }
+dialog.sheet .added-panel { max-height: 88vh; overflow-y: auto; border-color: var(--border); box-shadow: 0 12px 40px rgba(27, 31, 36, .2); }
+@media (max-width: 720px) {
+  .home.has-composer { padding-bottom: 76px; }
+  .composer-bar { bottom: calc(74px + env(safe-area-inset-bottom)); width: calc(100% - 24px); }
+  dialog.sheet { width: 100%; margin: auto 0 0; }
+  dialog.sheet .added-panel { border-radius: 16px 16px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
