@@ -521,9 +521,11 @@ export default function taskRoutes(config) {
 }
 
 // Table actions only ever return to the table.
+// Where table actions (and the same actions on Home) return to: the table, with
+// its filters, or Home. Anything else goes back to the table.
 function tableBack(value) {
   const path = safeLocalPath(value, '/table');
-  return /^\/table(\?|$)/.test(path) ? path : '/table';
+  return /^\/table(\?|$)/.test(path) || path === '/home' ? path : '/table';
 }
 
 // "Tasks updated: 3. Bug added. Skipped (you can't edit them): #12, #15."
@@ -531,6 +533,8 @@ async function bulkMessage(req, op, value, { updated, skipped, toggled }) {
   const t = req.t;
   const list = (ids) => ids.map((id) => `#${id}`).join(t('common.listSep'));
   const parts = [updated.length ? t('table.result.updated', { n: updated.length }) : t('table.result.none')];
+  // One task moved (the usual case on Home): say where it went.
+  if (op === 'status' && updated.length === 1) parts[0] = t('table.result.movedOne', { n: `#${updated[0]}`, status: t(`status.${value}`) });
   if (updated.length && toggled) {
     let name = '';
     if (op === 'label') {

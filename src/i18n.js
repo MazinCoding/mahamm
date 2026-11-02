@@ -37,6 +37,7 @@ export function formatters(lang, timezone) {
   const loc = lang === 'ar' ? 'ar-OM-u-nu-latn' : 'en-GB';
   const dateFmt = new Intl.DateTimeFormat(loc, { day: 'numeric', month: 'short', year: 'numeric', timeZone: timezone });
   const shortFmt = new Intl.DateTimeFormat(loc, { day: 'numeric', month: 'short', timeZone: timezone });
+  const dayFmt = new Intl.DateTimeFormat(loc, { weekday: 'long', day: 'numeric', month: 'long', timeZone: timezone });
   const fullFmt = new Intl.DateTimeFormat(loc, {
     day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone,
   });
@@ -47,6 +48,7 @@ export function formatters(lang, timezone) {
   return {
     date: (v) => (v ? dateFmt.format(dayOnly(v)) : ''),
     short: (v) => (v ? shortFmt.format(dayOnly(v)) : ''),
+    day: (v) => (v ? dayFmt.format(dayOnly(v)) : ''),
     dateTime: (v) => (v ? fullFmt.format(toDate(v)) : ''),
     iso: (v) => (v ? toDate(v).toISOString() : ''),
     ago: (v) => {

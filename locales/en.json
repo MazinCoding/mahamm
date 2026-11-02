@@ -19,7 +19,9 @@
   "nav": {
     "skip": "Skip to content",
     "sub": "Team tasks",
+    "home": "Home",
     "main": "Main",
+    "tabs": "Sections",
     "board": "Board",
     "list": "List",
     "table": "Table",
@@ -184,6 +186,7 @@
     "lockSr": "You can’t edit this",
     "result": {
       "updated": "Tasks updated: {n}.",
+      "movedOne": "{n} moved to {status}.",
       "none": "Nothing needed changing.",
       "locked": "Skipped because you can’t edit them: {list}.",
       "closed": "Skipped because they’re closed: {list}.",
@@ -764,5 +767,30 @@
     "csrf": "Your session expired. Go back, reload the page and try again.",
     "code": "Error {status}",
     "home": "Go to the board"
+  },
+  "home": {
+    "title": "Home",
+    "hello": "Hello,",
+    "mine": "My tasks",
+    "overdueN": "{n} overdue",
+    "mineEmpty": "Nothing is assigned to you right now.",
+    "statusOf": "Change the status of {n}. Now:"
+  },
+  "menu": {
+    "title": "All views",
+    "sub": "Every view and tool from the computer version.",
+    "views": "Views",
+    "board": "Columns from Backlog to Done",
+    "list": "Search and filter every task",
+    "table": "Change many tasks at once",
+    "newTask": "The full form, with a description and files",
+    "audit": "Everything that happened, and who did it",
+    "notifications": "Mentions, assignments and reviews",
+    "admin": "Admin",
+    "people": "Invite people and manage roles",
+    "labels": "Names and colours for labels",
+    "import": "Bring tasks in from Excel or CSV",
+    "account": "Your account",
+    "settings": "Password, two-step verification and email"
   }
 }

@@ -68,7 +68,7 @@ describe('headers', () => {
   });
 
   test('templates contain no inline scripts or styles', async () => {
-    const pages = ['/board', '/tasks', '/tasks/new', '/audit', '/settings', '/notifications'];
+    const pages = ['/home', '/mahamm', '/board', '/tasks', '/tasks/new', '/audit', '/settings', '/notifications'];
     for (const p of pages) {
       const html = (await memberAgent.get(p)).text;
       assert.ok(!/<script(?![^>]*\bsrc=)[^>]*>/i.test(html), `inline script on ${p}`);

@@ -425,3 +425,58 @@ input[type='file']::file-selector-button:hover { background: var(--column); }
 .new-people-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px 16px; }
 .new-person { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
 .new-person:has(input[type=checkbox]:checked) { border-color: var(--accent); background: #f2f8f7; }
+
+/* Home: the phone-first start page, and the menu behind the Mahamm tab */
+.topbar-account { display: inline-flex; align-items: center; gap: 10px; }
+.home, .menu-page { max-width: 720px; margin: 0 auto; }
+.home { display: flex; flex-direction: column; gap: 16px; }
+.home-head h1 { font-size: 24px; }
+.home-head .sub { margin-top: 2px; }
+.widget { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.widget-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.widget-head h2 { margin: 0; font-size: 16px; }
+.widget-empty { margin: 0; padding: 24px 16px; text-align: center; color: var(--muted); }
+.my-list { list-style: none; margin: 0; padding: 0; }
+.my-task { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; border-top: 1px solid var(--line); }
+.my-task:first-child { border-top: 0; }
+.my-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; color: var(--muted); }
+.my-meta .missing { font-style: italic; }
+.my-title { color: var(--text); font-size: 15px; font-weight: 500; line-height: 1.35; text-decoration: none; overflow-wrap: anywhere; }
+.my-title:hover { color: var(--accent); text-decoration: underline; }
+.my-actions { display: flex; align-items: flex-start; gap: 8px; }
+.status-pick { flex: 1 1 auto; min-width: 0; }
+.status-pick summary { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; font-size: 13px; cursor: pointer; list-style: none; }
+.status-pick summary::-webkit-details-marker { display: none; }
+.status-pick[open] summary svg { transform: rotate(180deg); }
+.status-menu { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.status-menu .rb { min-height: 40px; padding: 0 14px; font-size: 13px; }
+.menu-heading { margin: 20px 4px 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+.menu-list { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+.menu-item { display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 10px 16px; color: var(--text); text-decoration: none; border-top: 1px solid var(--line); }
+.menu-list > .menu-item:first-child { border-top: 0; }
+.menu-item:hover { background: var(--subtle); color: var(--text); }
+.menu-icon { width: 36px; height: 36px; border-radius: 10px; background: var(--accent-soft); color: var(--accent-ink); display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.menu-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.menu-name { font-weight: 600; }
+.menu-desc { font-size: 12px; color: var(--muted); }
+.menu-go { flex: none; color: var(--muted); }
+.badge-inline { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--bad); color: #fff; font-size: 11px; font-weight: 600; vertical-align: 1px; }
+.menu-signout { margin: 0; padding: 12px 16px; border-top: 1px solid var(--line); }
+
+/* Phones: a two-tab bar at the bottom replaces the long row of links at the top */
+.tabbar { display: none; }
+@media (max-width: 720px) {
+  .has-tabbar { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+  .nav, .topbar-account { display: none; }
+  .topbar-inner { flex-wrap: nowrap; min-height: 56px; }
+  .topbar-inner, .container { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .brand { padding: 8px 0; }
+  .brand-sub { display: none; }
+  .topbar-tools { padding: 8px 0; }
+  .tabbar { display: flex; position: fixed; inset-inline: 0; bottom: 0; z-index: 40; padding-bottom: env(safe-area-inset-bottom); background: var(--surface); border-top: 1px solid var(--border); }
+  .tab-link { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 64px; color: var(--muted); font-size: 12px; font-weight: 500; text-decoration: none; }
+  .tab-link:hover { color: var(--text); }
+  .tab-link svg { box-sizing: content-box; padding: 3px 18px; border-radius: 999px; }
+  .tab-link.is-active { color: var(--accent-ink); font-weight: 600; }
+  .tab-link.is-active svg { background: var(--accent-soft); }
+}

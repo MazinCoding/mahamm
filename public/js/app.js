@@ -347,6 +347,15 @@
   var quickTitle = document.querySelector('#quick-title[autofocus]');
   if (quickTitle && document.activeElement !== quickTitle) quickTitle.focus();
 
+  // Home: opening one task's status menu closes any other that's open.
+  var picks = document.querySelectorAll('details[data-one-open]');
+  picks.forEach(function (d) {
+    d.addEventListener('toggle', function () {
+      if (!d.open) return;
+      picks.forEach(function (other) { if (other !== d) other.open = false; });
+    });
+  });
+
   // Close form: show "who did it" only for Completed, "duplicate of" only for Duplicate.
   var closeForm = document.querySelector('[data-close-form]');
   if (closeForm) {
