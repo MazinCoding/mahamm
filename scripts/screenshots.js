@@ -304,7 +304,7 @@ await step('phone-home', async () => {
   await mobile.goto(`${base}/home`);
   note(`check: phone tab bar visible = ${await mobile.locator('.tabbar').isVisible()}; top links hidden = ${!(await mobile.locator('.topbar .nav').isVisible())}; bell and language at the top = ${await mobile.locator('.topbar .bell').isVisible() && await mobile.locator('.topbar form[action="/lang"]').isVisible()}`);
   await shot(mobile, '26a-phone-home');
-  const first = mobile.locator('.my-task').first();
+  const first = mobile.locator('[aria-labelledby="mine-title"] .my-task').first();
   const id = await first.getAttribute('data-task-id');
   await first.locator('summary').click();
   await shot(mobile, '26b-phone-home-status-open');
