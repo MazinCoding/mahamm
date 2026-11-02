@@ -23,6 +23,8 @@ after(teardown);
 beforeEach(resetLimits);
 
 const fromHome = (agent, body) => post(agent, '/tasks/bulk', { back: '/home', ...body }, '/home');
+// New tasks start in Backlog or To do; move them on through the table like anyone would.
+const moveTo = (id, status) => post(adminAgent, '/tasks/bulk', { ids: String(id), apply: `status:${status}`, back: '/table' }, '/table');
 
 describe('start page', () => {
   test('signing in lands on Home, and the site root goes there too', async () => {
@@ -46,9 +48,9 @@ describe('start page', () => {
 describe('My tasks', () => {
   test('shows only my open tasks, what I am doing now first', async () => {
     await makeTask(adminAgent, { title: 'Aisha todo task', status: 'todo', assignees: [aisha.id] });
-    await makeTask(adminAgent, { title: 'Aisha doing task', status: 'progress', assignees: [aisha.id] });
-    await makeTask(adminAgent, { title: 'Said only task', status: 'progress', assignees: [said.id] });
-    const closed = await makeTask(adminAgent, { title: 'Aisha closed task', status: 'review', assignees: [aisha.id] });
+    await moveTo(await makeTask(adminAgent, { title: 'Aisha doing task', status: 'todo', assignees: [aisha.id] }), 'progress');
+    await moveTo(await makeTask(adminAgent, { title: 'Said only task', status: 'todo', assignees: [said.id] }), 'progress');
+    const closed = await makeTask(adminAgent, { title: 'Aisha closed task', status: 'todo', assignees: [aisha.id] });
     await post(adminAgent, `/tasks/${closed}/close`, { reason: 'completed', credited: aisha.id, duplicate_of: '' }, `/tasks/${closed}/close`);
     await makeTask(aishaAgent, { title: 'Created but not assigned', status: 'todo' });
 
@@ -94,7 +96,8 @@ describe('My tasks', () => {
   });
 
   test('Done… goes through the close page and comes back to Home', async () => {
-    const id = await makeTask(adminAgent, { title: 'Finish me from home', status: 'progress', assignees: [aisha.id] });
+    const id = await makeTask(adminAgent, { title: 'Finish me from home', status: 'todo', assignees: [aisha.id] });
+    await moveTo(id, 'progress');
     const res = await fromHome(aishaAgent, { ids: String(id), apply: 'close' });
     assert.equal(res.headers.location, `/table/close?ids=${id}&back=%2Fhome`);
     const page = await aishaAgent.get(res.headers.location);
