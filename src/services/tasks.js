@@ -64,6 +64,28 @@ export async function myTasks(userId) {
   return rows;
 }
 
+// Home: open tasks someone isn't on yet. Priority first; within a priority, tasks
+// others are already working on, then unassigned ones, then Backlog; then the
+// soonest due date and the oldest task.
+export const SUGGESTED_PAGE = 50;
+
+export async function suggestedTasks(userId, { limit = 5, offset = 0 } = {}) {
+  const notMine = 'NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = $1)';
+  const { total } = await one(`SELECT count(*)::int AS total FROM tasks t WHERE t.closed_at IS NULL AND ${notMine}`, [userId]);
+  const { rows } = await q(
+    `SELECT ${CARD_COLUMNS} ${CARD_FROM}
+     WHERE t.closed_at IS NULL AND ${notMine}
+     ORDER BY CASE t.priority WHEN 'high' THEN 0 WHEN 'med' THEN 1 ELSE 2 END,
+              CASE WHEN t.status = 'backlog' THEN 2
+                   WHEN EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id) THEN 0
+                   ELSE 1 END,
+              t.due_date ASC NULLS LAST, t.created_at ASC, t.id ASC
+     LIMIT $2 OFFSET $3`,
+    [userId, limit, offset],
+  );
+  return { rows, total };
+}
+
 export async function boardStats(wipLimit, timezone) {
   return one(
     `SELECT
@@ -560,6 +582,26 @@ export async function undoBatch(batch, actor, ip) {
       undone.push(t.id);
     }
     return { expired: false, undone, changed: [...new Set(changed)] };
+  });
+}
+
+// Join: anyone can add themselves to any open task. It's recorded like any other
+// assignee change, with a batch id so Undo can take it back.
+export async function joinTask(id, actor, ip) {
+  return tx(async (db) => {
+    const task = await lockTask(db, id);
+    if (task.closed_at) throw new HttpError(409, 'task closed');
+    const { rowCount } = await db.query(
+      'INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [id, actor.id],
+    );
+    if (!rowCount) return { joined: false, batch: null };
+    const batch = randomUUID();
+    await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [id]);
+    await audit(db, {
+      actorId: actor.id, action: 'task.edited', taskId: id, details: { changes: { assignees: { added: [actor.id], removed: [] } }, batch }, ip,
+    });
+    return { joined: true, batch };
   });
 }
 

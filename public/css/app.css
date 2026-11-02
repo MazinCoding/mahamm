@@ -480,3 +480,11 @@ input[type='file']::file-selector-button:hover { background: var(--column); }
   .tab-link.is-active { color: var(--accent-ink); font-weight: 600; }
   .tab-link.is-active svg { background: var(--accent-soft); }
 }
+
+/* Home: suggested tasks with a Join button */
+.suggest-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.suggest-people { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--muted); }
+.suggest-people .missing { font-style: italic; }
+.suggest-people .avatars .av { width: 24px; height: 24px; }
+.join-btn { min-width: 84px; min-height: 36px; }
+.home .back { margin-bottom: 6px; }

@@ -50,3 +50,32 @@
 {% endmacro %}
 
 {% macro field_error(errors, name) %}{% if errors[name] %}<p class="error" id="err-{{ name }}">{{ t('form.err.' + name) }}</p>{% endif %}{% endmacro %}
+
+{# Home: a task you could pick up, with who is on it (or "Nobody yet") and a Join button. #}
+{% macro suggestCard(task, today, back) %}
+<li class="my-task suggest" data-task-id="{{ task.id }}">
+  <div class="my-meta">
+    <span class="num">#{{ task.id }}</span>
+    {{ prio(task.priority) }}
+    <span class="status-chip s-{{ task.status }}">{{ t('status.' + task.status) }}</span>
+    {% if task.open_flags %}<span class="chip c-red">{{ t('flag.flagged') }}</span>{% endif %}
+    <span class="grow"></span>
+    {% if not task.due_date %}<span class="missing">{{ t('table.noDue') }}</span>
+    {% elif task.due_date < today %}<span class="due is-overdue">{{ t('task.overdue', { d: fmt.short(task.due_date) }) }}</span>
+    {% else %}<span class="due">{{ t('task.due', { d: fmt.short(task.due_date) }) }}</span>{% endif %}
+  </div>
+  <a class="my-title" dir="auto" href="/tasks/{{ task.id }}">{{ task.title }}</a>
+  {% if task.labels.length %}<div class="chips">{% for l in task.labels %}{{ label(l) }}{% endfor %}</div>{% endif %}
+  <div class="suggest-foot">
+    <span class="suggest-people">
+      {% if task.assignees.length %}{{ avatars(task.assignees) }}<span><bdi>{{ task.assignees[0].name }}</bdi>{% if task.assignees.length > 1 %} {{ t('home.andN', { n: task.assignees.length - 1 }) }}{% endif %}</span>
+      {% else %}<span class="missing">{{ t('home.nobodyYet') }}</span>{% endif %}
+    </span>
+    <form method="post" action="/tasks/{{ task.id }}/join" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <input type="hidden" name="back" value="{{ back }}">
+      <button class="btn btn-primary btn-sm join-btn" type="submit">{{ t('home.join') }}<span class="sr-only"> #{{ task.id }}</span></button>
+    </form>
+  </div>
+</li>
+{% endmacro %}

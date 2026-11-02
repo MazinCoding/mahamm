@@ -774,7 +774,14 @@
     "mine": "My tasks",
     "overdueN": "{n} overdue",
     "mineEmpty": "Nothing is assigned to you right now.",
-    "statusOf": "Change the status of {n}. Now:"
+    "statusOf": "Change the status of {n}. Now:",
+    "suggested": "Suggested tasks",
+    "suggestedSub": "Open tasks you're not on yet: {n}. Highest priority first.",
+    "suggestedEmpty": "You're on every open task, so there's nothing to suggest.",
+    "seeAll": "See all {n}",
+    "nobodyYet": "Nobody yet",
+    "andN": "and {n} more",
+    "join": "Join"
   },
   "menu": {
     "title": "All views",
@@ -792,5 +799,10 @@
     "import": "Bring tasks in from Excel or CSV",
     "account": "Your account",
     "settings": "Password, two-step verification and email"
+  },
+  "join": {
+    "done": "You joined {n}. It's in My tasks now.",
+    "already": "You're already on {n}.",
+    "closed": "{n} is already closed, so it can't be joined."
   }
 }

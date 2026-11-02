@@ -107,6 +107,7 @@ await step('drag', async () => {
 
 const pages = [
   ['05a-menu', '/mahamm'],
+  ['05b-suggested', '/suggested'],
   ['05-list', '/tasks'],
   ['06-list-closed', '/tasks?state=closed'],
   ['06b-table', '/table'],
@@ -312,6 +313,14 @@ await step('phone-home', async () => {
   await Promise.all([mobile.waitForEvent('load'), first.locator(`.status-menu button[value="${target}"]`).click()]);
   note(`check: phone status change on Home for #${id} = ${(await mobile.locator('.flash').innerText()).trim()}; still on ${new URL(mobile.url()).pathname}`);
   await shot(mobile, '26c-phone-home-moved');
+  const pick = mobile.locator('.suggest').first();
+  const picked = await pick.getAttribute('data-task-id');
+  await Promise.all([mobile.waitForEvent('load'), pick.locator('.join-btn').click()]);
+  const inMine = await mobile.locator(`[aria-labelledby="mine-title"] [data-task-id="${picked}"]`).count();
+  note(`check: Join on phone for #${picked} = ${(await mobile.locator('.flash').innerText()).trim().replace(/\s+/g, ' ')}; now in My tasks = ${inMine ? 'yes' : 'NO'}`);
+  await shot(mobile, '26g-phone-home-joined');
+  await mobile.goto(`${base}/suggested`);
+  await shot(mobile, '26h-phone-suggested');
   await mobile.locator('.tabbar a[href="/mahamm"]').click();
   await mobile.waitForURL('**/mahamm');
   await shot(mobile, '26d-phone-menu');

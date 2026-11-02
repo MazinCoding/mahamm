@@ -9,6 +9,20 @@
     <p class="sub">{{ fmt.day(today) }}</p>
   </header>
 
+  <section class="widget" aria-labelledby="suggested-title">
+    <div class="widget-head">
+      <h2 id="suggested-title">{{ t('home.suggested') }}</h2>
+      <span class="count">{{ suggested.total }}</span>
+      <span class="grow"></span>
+      {% if suggested.total > suggested.rows.length %}<a class="link-sm" href="/suggested">{{ t('home.seeAll', { n: suggested.total }) }}</a>{% endif %}
+    </div>
+    {% if suggested.rows.length %}
+    <ul class="my-list">{% for task in suggested.rows %}{{ m.suggestCard(task, today, '/home') }}{% endfor %}</ul>
+    {% else %}
+    <p class="widget-empty">{{ t('home.suggestedEmpty') }}</p>
+    {% endif %}
+  </section>
+
   <section class="widget" aria-labelledby="mine-title">
     <div class="widget-head">
       <h2 id="mine-title">{{ t('home.mine') }}</h2>

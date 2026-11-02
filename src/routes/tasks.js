@@ -7,7 +7,7 @@ import { safeLocalPath } from '../security.js';
 import { MAX_ATTACHMENT_BYTES, checkAttachment, uploadThenCsrf } from '../uploads.js';
 import {
   HttpError, OPEN_STATUSES, PAGE_SIZE, PRIORITIES, TABLE_DUE, TABLE_SORTS, addAttachment, addComment, boardStats, boardTasks,
-  UNDO_MINUTES, bulkApply, bulkClose, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, listTasks,
+  UNDO_MINUTES, bulkApply, bulkClose, canEdit, canResolveFlags, closeTask, createTask, flagTask, getAttachment, getTask, joinTask, listTasks,
   moveTask, removeAttachment, reopenTask, resolveFlag, tableTasks, taskDetail, tasksToClose, undoBatch, updateTask,
 } from '../services/tasks.js';
 
@@ -279,6 +279,26 @@ export default function taskRoutes(config) {
     return res.redirect(back);
   });
 
+  // Join a task from Home: adds you as an assignee. Anyone can join any open task.
+  r.post('/tasks/:id/join', requireAuth, writeLimit, async (req, res) => {
+    const id = taskId(req);
+    const back = tableBack(req.body.back);
+    const home = back.startsWith('/table') ? '/home' : back;
+    let out;
+    try {
+      out = await joinTask(id, req.user, req.ip);
+    } catch (err) {
+      if (err instanceof HttpError && err.status === 409) {
+        flash(req, req.t('join.closed', { n: `#${id}` }), 'warn');
+        return res.redirect(home);
+      }
+      throw err;
+    }
+    if (out.joined) flash(req, req.t('join.done', { n: `#${id}` }), 'ok', out.batch);
+    else flash(req, req.t('join.already', { n: `#${id}` }), 'warn');
+    return res.redirect(home);
+  });
+
   // Admins set the in-progress limit. Going over it only warns; nothing is blocked.
   r.post('/board/wip-limit', requireAuth, requireAdmin, writeLimit, async (req, res) => {
     const back = req.body.back === 'table' ? '/table' : '/board';
@@ -522,10 +542,10 @@ export default function taskRoutes(config) {
 
 // Table actions only ever return to the table.
 // Where table actions (and the same actions on Home) return to: the table, with
-// its filters, or Home. Anything else goes back to the table.
+// its filters, Home, or the full list of suggested tasks. Anything else goes back to the table.
 function tableBack(value) {
   const path = safeLocalPath(value, '/table');
-  return /^\/table(\?|$)/.test(path) || path === '/home' ? path : '/table';
+  return /^\/table(\?|$)/.test(path) || /^\/(home|suggested(\?page=\d{1,4})?)$/.test(path) ? path : '/table';
 }
 
 // "Tasks updated: 3. Bug added. Skipped (you can't edit them): #12, #15."
