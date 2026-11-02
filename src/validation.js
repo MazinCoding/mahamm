@@ -93,6 +93,9 @@ export const quickAddSchema = z.object({
   status: z.enum(['backlog', 'todo']).catch('todo'),
 });
 
+// Home composer: just what you're working on.
+export const mineSchema = z.object({ title: z.preprocess(cleanLine, z.string().min(1).max(200)) });
+
 export const wipLimitSchema = z.object({ limit: z.coerce.number().int().min(1).max(50) });
 
 export const commentSchema = z.object({ body: z.preprocess(clean, z.string().min(1).max(5000)) });

@@ -1,7 +1,26 @@
 import express from 'express';
 import { requireAuth } from '../auth.js';
-import { SUGGESTED_PAGE, myTasks, suggestedTasks } from '../services/tasks.js';
+import { q } from '../db.js';
+import { SUGGESTED_PAGE, canEdit, getTask, myTasks, suggestedTasks } from '../services/tasks.js';
+import { activePeople } from '../services/users.js';
 import { idParam } from '../validation.js';
+
+// After the composer adds a task, Home offers its details buttons: only for an
+// open task this person created and can still edit.
+async function addedTask(req) {
+  const id = idParam(req.query.added);
+  if (!id) return null;
+  const task = await getTask(id);
+  if (!task || task.closed_at || task.creator_id !== req.user.id || !canEdit(req.user, task)) return null;
+  return task;
+}
+
+// Every label, marked if the task has it, for the label buttons.
+async function labelsFor(task) {
+  const on = new Set(task.labels.map((l) => l.id));
+  const { rows } = await q('SELECT id, name_en, name_ar, color FROM labels ORDER BY id');
+  return rows.map((l) => ({ ...l, on: on.has(l.id) }));
+}
 
 // The phone-first start page and the menu behind the "Mahamm" tab.
 export default function homeRoutes(config) {
@@ -9,10 +28,15 @@ export default function homeRoutes(config) {
 
   r.get('/home', requireAuth, async (req, res) => {
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: config.timezone }).format(new Date());
-    const [mine, suggested] = await Promise.all([myTasks(req.user.id), suggestedTasks(req.user.id, { limit: 5 })]);
+    const [mine, suggested, added] = await Promise.all([
+      myTasks(req.user.id), suggestedTasks(req.user.id, { limit: 5 }), addedTask(req),
+    ]);
     res.render('home.njk', {
       mine,
       suggested,
+      added,
+      labels: added ? await labelsFor(added) : [],
+      assignable: added ? await activePeople() : [],
       today,
       overdue: mine.filter((t) => t.due_date && t.due_date < today).length,
       firstName: String(req.user.name || '').trim().split(/\s+/)[0],

@@ -3,11 +3,71 @@
 {% block title %}{{ t('home.title') }}{% endblock %}
 
 {% block content %}
-<div class="home">
+<div class="home has-composer">
   <header class="home-head">
     <h1>{{ t('home.hello') }} <bdi>{{ firstName }}</bdi></h1>
     <p class="sub">{{ fmt.day(today) }}</p>
   </header>
+
+  {% if added %}
+  {# After the composer: the table's buttons for this one task. Each tap saves.
+     Without JavaScript these are ordinary forms that come back here; with it, the
+     panel opens as a pop-up and saves without leaving the page. #}
+  <section class="added-panel" data-added-panel data-task-id="{{ added.id }}" aria-labelledby="added-title">
+    <div class="added-head">
+      <h2 id="added-title" tabindex="-1">{{ t('home.addedTitle', { n: '#' + added.id }) }}</h2>
+      <p class="added-task" dir="auto">{{ added.title }}</p>
+      <p class="hint">{{ t('home.addedHint') }}</p>
+    </div>
+    <form class="added-form" method="post" action="/tasks/bulk" data-added-form data-msg-failed="{{ t('table.failed') }}">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <input type="hidden" name="back" value="/home?added={{ added.id }}">
+      <input type="hidden" name="ids" value="{{ added.id }}">
+      {# Pressing Enter in the date field uses the first submit button, so make that "Set date". #}
+      <button class="sr-only" type="submit" name="apply" value="due" tabindex="-1" aria-hidden="true">{{ t('table.setDue') }}</button>
+      <div class="ribbon-group" role="group" aria-labelledby="ag-status" data-group="status">
+        <span class="ribbon-label" id="ag-status">{{ t('field.status') }}</span>
+        <div class="ribbon-buttons">{% for s in ['backlog', 'todo', 'progress', 'review'] %}<button class="rb s-{{ s }}" type="submit" name="apply" value="status:{{ s }}" aria-pressed="{{ 'true' if added.status == s else 'false' }}">{{ t('status.' + s) }}</button>{% endfor %}<button class="rb s-done" type="submit" name="apply" value="close">{{ t('table.doneButton') }}</button></div>
+      </div>
+      <div class="ribbon-group" role="group" aria-labelledby="ag-prio" data-group="priority">
+        <span class="ribbon-label" id="ag-prio">{{ t('field.priority') }}</span>
+        <div class="ribbon-buttons">{% for p in ['high', 'med', 'low'] %}<button class="rb prio-{{ p }}" type="submit" name="apply" value="priority:{{ p }}" aria-pressed="{{ 'true' if added.priority == p else 'false' }}">{{ t('priority.' + p) }}</button>{% endfor %}</div>
+      </div>
+      {% if labels.length %}
+      <div class="ribbon-group" role="group" aria-labelledby="ag-labels" data-group="label">
+        <span class="ribbon-label" id="ag-labels">{{ t('field.labels') }}</span>
+        <div class="ribbon-buttons">{% for l in labels %}<button class="rb c-{{ l.color }}" type="submit" name="apply" value="label:{{ l.id }}" aria-pressed="{{ 'true' if l.on else 'false' }}">{{ labelName(l) }}</button>{% endfor %}</div>
+      </div>
+      {% endif %}
+      <div class="ribbon-group" role="group" aria-labelledby="ag-people" data-group="assignee">
+        <span class="ribbon-label" id="ag-people">{{ t('field.assignees') }}</span>
+        <p class="added-people" data-people data-none="{{ t('table.unassigned') }}">{% for p in added.assignees %}<span class="chip" data-person="{{ p.id }}"><bdi>{{ p.name }}</bdi></span>{% else %}<span class="missing">{{ t('table.unassigned') }}</span>{% endfor %}</p>
+        <div class="ribbon-buttons">
+          <label class="sr-only" for="ag-person">{{ t('list.person') }}</label>
+          <select id="ag-person" class="input input-sm" name="assignee">{% for p in assignable %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select>
+          <button class="rb" type="submit" name="apply" value="assignee">{{ t('table.assignToggle') }}</button>
+        </div>
+      </div>
+      <div class="ribbon-group" role="group" aria-labelledby="ag-due" data-group="due">
+        <span class="ribbon-label" id="ag-due">{{ t('field.due') }}</span>
+        <div class="ribbon-buttons">
+          <label class="sr-only" for="ag-due-input">{{ t('field.due') }}</label>
+          <input id="ag-due-input" class="input input-sm" type="date" name="due" min="2000-01-01" max="2100-12-31" value="{{ added.due_date or '' }}">
+          <button class="rb" type="submit" name="apply" value="due">{{ t('table.setDue') }}</button>
+          <button class="rb" type="submit" name="apply" value="due-clear">{{ t('table.clearDue') }}</button>
+          <button class="rb" type="button" data-due-in="0" hidden>{{ t('home.today') }}</button>
+          <button class="rb" type="button" data-due-in="1" hidden>{{ t('home.tomorrow') }}</button>
+        </div>
+        <span class="missing small" data-no-due{% if added.due_date %} hidden{% endif %}>{{ t('table.noDue') }}</span>
+      </div>
+      <p class="ribbon-status" data-added-status role="status" aria-live="polite"></p>
+    </form>
+    <div class="added-actions">
+      <a class="btn btn-secondary" href="/tasks/{{ added.id }}">{{ t('home.openTask') }}</a>
+      <a class="btn btn-primary" href="/home" data-added-done>{{ t('home.addedDone') }}</a>
+    </div>
+  </section>
+  {% endif %}
 
   <section class="widget" aria-labelledby="suggested-title">
     <div class="widget-head">
@@ -64,5 +124,14 @@
     <p class="widget-empty">{{ t('home.mineEmpty') }}</p>
     {% endif %}
   </section>
+
+  {# Message-style box: the title is enough. It starts In progress and assigned to you. #}
+  <form class="composer-bar" method="post" action="/tasks/mine" data-composer>
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <label class="sr-only" for="composer-title">{{ t('home.composerLabel') }}</label>
+    <input id="composer-title" class="composer-input" name="title" maxlength="200" dir="auto" required pattern=".*\S.*" autocomplete="off" enterkeyhint="send" placeholder="{{ t('home.composerPh') }}" title="{{ t('table.quickEmpty') }}" aria-describedby="composer-hint" value="{{ flash.draft if flash and flash.draft else '' }}">
+    <p class="sr-only" id="composer-hint">{{ t('home.composerHint') }}</p>
+    <button class="composer-send" type="submit" aria-label="{{ t('home.composerSend') }}"><svg class="flip" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h13"/><path d="M12 5l7 7-7 7"/></svg></button>
+  </form>
 </div>
 {% endblock %}

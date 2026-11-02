@@ -781,7 +781,18 @@
     "seeAll": "See all {n}",
     "nobodyYet": "Nobody yet",
     "andN": "and {n} more",
-    "join": "Join"
+    "join": "Join",
+    "added": "Added {n} to your tasks, In progress.",
+    "addedTitle": "Added {n}",
+    "addedHint": "Want to add details? Tap any of these. Each one saves straight away, and all of them are optional.",
+    "openTask": "Open task",
+    "addedDone": "All set",
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "composerLabel": "What are you working on?",
+    "composerPh": "What are you working on?",
+    "composerHint": "It's added to your tasks as In progress. You can add details after sending.",
+    "composerSend": "Add task"
   },
   "menu": {
     "title": "All views",

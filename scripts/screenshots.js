@@ -321,6 +321,40 @@ await step('phone-home', async () => {
   await shot(mobile, '26g-phone-home-joined');
   await mobile.goto(`${base}/suggested`);
   await shot(mobile, '26h-phone-suggested');
+
+  // The composer sits above the tab bar and never covers the last task.
+  await mobile.goto(`${base}/home`);
+  const layout = await mobile.evaluate(() => {
+    window.scrollTo(0, document.documentElement.scrollHeight);
+    const box = document.querySelector('.composer-bar').getBoundingClientRect();
+    const tabs = document.querySelector('.tabbar').getBoundingClientRect();
+    const items = document.querySelectorAll('.my-task');
+    const last = items[items.length - 1].getBoundingClientRect();
+    return { above: box.bottom <= tabs.top, clear: last.bottom <= box.top, gap: Math.round(box.top - last.bottom) };
+  });
+  note(`check: phone composer above the tab bar = ${layout.above}; last task clear of the composer = ${layout.clear} (${layout.gap}px)`);
+  await mobile.screenshot({ path: path.join(out, '26i-phone-home-bottom.png') });
+
+  // Send a task, fill in a few details in the pop-up, then go back to Home.
+  await mobile.fill('#composer-title', 'Refill the printer paper on floor 2');
+  await Promise.all([mobile.waitForEvent('load'), mobile.press('#composer-title', 'Enter')]);
+  await mobile.waitForSelector('dialog.sheet[open]');
+  const here = new URL(mobile.url());
+  note(`check: after sending, address = ${here.pathname}${here.search}; pop-up open = ${(await mobile.locator('dialog.sheet[open]').count()) === 1}; message = ${(await mobile.locator('.flash').innerText()).trim()}`);
+  await mobile.screenshot({ path: path.join(out, '26j-phone-popup.png') });
+  await mobile.click('dialog.sheet button[value="priority:high"]');
+  await mobile.waitForFunction(() => document.querySelector('dialog.sheet button[value="priority:high"]').getAttribute('aria-pressed') === 'true');
+  const firstLabel = mobile.locator('dialog.sheet [data-group="label"] button').first();
+  await firstLabel.click();
+  await mobile.waitForFunction(() => document.querySelector('dialog.sheet [data-group="label"] button').getAttribute('aria-pressed') === 'true');
+  await mobile.click('dialog.sheet [data-due-in="1"]');
+  await mobile.waitForFunction(() => document.querySelector('[data-no-due]').hidden);
+  note(`check: pop-up after High, a label and Tomorrow = ${(await mobile.locator('[data-added-status]').innerText()).trim()}; due field = ${await mobile.inputValue('#ag-due-input')}`);
+  await mobile.screenshot({ path: path.join(out, '26k-phone-popup-filled.png') });
+  await Promise.all([mobile.waitForURL((u) => u.pathname === '/home' && !u.search), mobile.click('[data-added-done]')]);
+  const added = mobile.locator('.my-task', { hasText: 'Refill the printer paper on floor 2' });
+  note(`check: back on Home, the new task shows: ${(await added.innerText()).replace(/\s+/g, ' ').trim()}`);
+  await shot(mobile, '26l-phone-home-after-popup');
   await mobile.locator('.tabbar a[href="/mahamm"]').click();
   await mobile.waitForURL('**/mahamm');
   await shot(mobile, '26d-phone-menu');
