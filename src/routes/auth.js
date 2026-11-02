@@ -23,7 +23,7 @@ export default function authRoutes(config) {
   const r = express.Router();
 
   r.get('/login', async (req, res) => {
-    if (req.user) return res.redirect('/board');
+    if (req.user) return res.redirect('/home');
     if ((await userCount()) === 0) return res.redirect('/setup');
     res.render('auth/login.njk', { next: safeLocalPath(req.query.next, ''), email: '' });
   });
@@ -64,7 +64,7 @@ export default function authRoutes(config) {
     }
     await startSession(req, user);
     await audit({ query: q }, { actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, ip: req.ip });
-    return res.redirect(next || '/board');
+    return res.redirect(next || '/home');
   });
 
   const pendingUser = (req) => {
@@ -118,7 +118,7 @@ export default function authRoutes(config) {
     if (usedRecovery) await audit({ query: q }, { actorId: user.id, action: 'auth.recovery_code_used', subjectUserId: user.id, ip: req.ip });
     await audit({ query: q }, { actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, details: { two_factor: true }, ip: req.ip });
     if (usedRecovery) req.session.flash = { type: 'warn', text: req.t('auth.recoveryUsed') };
-    return res.redirect(next || '/board');
+    return res.redirect(next || '/home');
   });
 
   r.post('/logout', async (req, res) => {
@@ -208,7 +208,7 @@ export default function authRoutes(config) {
     }
     await startSession(req, user);
     await audit({ query: q }, { actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, ip: req.ip });
-    res.redirect(user.role === 'admin' ? '/settings/two-factor' : '/board');
+    res.redirect(user.role === 'admin' ? '/settings/two-factor' : '/home');
   });
 
   // First-run setup: only works while there are no users, and only with SETUP_TOKEN.

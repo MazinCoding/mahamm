@@ -50,6 +50,20 @@ export async function boardTasks({ onlyUserId = null } = {}) {
   return rows;
 }
 
+// Home: the open tasks someone is assigned to, what they're doing now first.
+export async function myTasks(userId) {
+  const { rows } = await q(
+    `SELECT ${CARD_COLUMNS} ${CARD_FROM}
+     WHERE t.closed_at IS NULL
+       AND EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = $1)
+     ORDER BY CASE t.status WHEN 'progress' THEN 0 WHEN 'review' THEN 1 WHEN 'todo' THEN 2 ELSE 3 END,
+              t.due_date ASC NULLS LAST, CASE t.priority WHEN 'high' THEN 0 WHEN 'med' THEN 1 ELSE 2 END, t.id DESC
+     LIMIT 200`,
+    [userId],
+  );
+  return rows;
+}
+
 export async function boardStats(wipLimit, timezone) {
   return one(
     `SELECT

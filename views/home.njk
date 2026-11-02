@@ -1,0 +1,54 @@
+{% extends "layout.njk" %}
+{% import "macros.njk" as m with context %}
+{% block title %}{{ t('home.title') }}{% endblock %}
+
+{% block content %}
+<div class="home">
+  <header class="home-head">
+    <h1>{{ t('home.hello') }} <bdi>{{ firstName }}</bdi></h1>
+    <p class="sub">{{ fmt.day(today) }}</p>
+  </header>
+
+  <section class="widget" aria-labelledby="mine-title">
+    <div class="widget-head">
+      <h2 id="mine-title">{{ t('home.mine') }}</h2>
+      <span class="count">{{ mine.length }}</span>
+      {% if overdue %}<span class="chip c-red">{{ t('home.overdueN', { n: overdue }) }}</span>{% endif %}
+    </div>
+    {% if mine.length %}
+    <ul class="my-list">
+      {% for task in mine %}
+      <li class="my-task" data-task-id="{{ task.id }}">
+        <div class="my-meta">
+          <span class="num">#{{ task.id }}</span>
+          {{ m.prio(task.priority) }}
+          {% if task.open_flags %}<span class="chip c-red">{{ t('flag.flagged') }}</span>{% endif %}
+          <span class="grow"></span>
+          {% if not task.due_date %}<span class="missing">{{ t('table.noDue') }}</span>
+          {% elif task.due_date < today %}<span class="due is-overdue">{{ t('task.overdue', { d: fmt.short(task.due_date) }) }}</span>
+          {% else %}<span class="due">{{ t('task.due', { d: fmt.short(task.due_date) }) }}</span>{% endif %}
+        </div>
+        <a class="my-title" dir="auto" href="/tasks/{{ task.id }}">{{ task.title }}</a>
+        {% if task.labels.length %}<div class="chips">{% for l in task.labels %}{{ m.label(l) }}{% endfor %}</div>{% endif %}
+        <div class="my-actions">
+          <details class="status-pick" data-one-open>
+            <summary class="status-chip s-{{ task.status }}"><span class="sr-only">{{ t('home.statusOf', { n: '#' + task.id }) }} </span>{{ t('status.' + task.status) }}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></summary>
+            <form class="status-menu" method="post" action="/tasks/bulk">
+              <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+              <input type="hidden" name="back" value="/home">
+              <input type="hidden" name="ids" value="{{ task.id }}">
+              {% for s in ['backlog', 'todo', 'progress', 'review'] %}<button class="rb s-{{ s }}" type="submit" name="apply" value="status:{{ s }}"{% if s == task.status %} aria-pressed="true"{% endif %}>{{ t('status.' + s) }}</button>{% endfor %}
+              <button class="rb s-done" type="submit" name="apply" value="close">{{ t('table.doneButton') }}</button>
+            </form>
+          </details>
+          <a class="btn btn-link btn-sm" href="/tasks/{{ task.id }}/edit">{{ t('task.edit') }}<span class="sr-only"> #{{ task.id }}</span></a>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="widget-empty">{{ t('home.mineEmpty') }}</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

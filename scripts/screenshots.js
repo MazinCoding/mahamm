@@ -85,8 +85,11 @@ await page.waitForURL('**/login/two-factor');
 await shot(page, '02-two-factor');
 await page.fill('#code', currentCode(secret));
 await page.click('form[action="/login/two-factor"] button[type=submit]');
-await page.waitForURL('**/board');
-await shot(page, '03-board');
+await page.waitForURL('**/home');
+note(`check: after sign-in the start page is ${new URL(page.url()).pathname}`);
+await shot(page, '03-home');
+await page.goto(`${base}/board`);
+await shot(page, '03b-board');
 
 // Drag a card from To do to In progress, then onto Done.
 await step('drag', async () => {
@@ -103,6 +106,7 @@ await step('drag', async () => {
 });
 
 const pages = [
+  ['05a-menu', '/mahamm'],
   ['05-list', '/tasks'],
   ['06-list-closed', '/tasks?state=closed'],
   ['06b-table', '/table'],
@@ -294,6 +298,30 @@ await step('arabic', async () => {
 const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, storageState: await desktop.storageState() });
 const mobile = await phone.newPage();
 watch(mobile, 'phone');
+// Phone: Home with the two-tab bar, a status change from My tasks, the menu, and both in Arabic.
+await step('phone-home', async () => {
+  await mobile.goto(`${base}/home`);
+  note(`check: phone tab bar visible = ${await mobile.locator('.tabbar').isVisible()}; top links hidden = ${!(await mobile.locator('.topbar .nav').isVisible())}; bell and language at the top = ${await mobile.locator('.topbar .bell').isVisible() && await mobile.locator('.topbar form[action="/lang"]').isVisible()}`);
+  await shot(mobile, '26a-phone-home');
+  const first = mobile.locator('.my-task').first();
+  const id = await first.getAttribute('data-task-id');
+  await first.locator('summary').click();
+  await shot(mobile, '26b-phone-home-status-open');
+  const now = await first.locator('.status-menu button[aria-pressed="true"]').getAttribute('value');
+  const target = now === 'status:review' ? 'status:progress' : 'status:review';
+  await Promise.all([mobile.waitForEvent('load'), first.locator(`.status-menu button[value="${target}"]`).click()]);
+  note(`check: phone status change on Home for #${id} = ${(await mobile.locator('.flash').innerText()).trim()}; still on ${new URL(mobile.url()).pathname}`);
+  await shot(mobile, '26c-phone-home-moved');
+  await mobile.locator('.tabbar a[href="/mahamm"]').click();
+  await mobile.waitForURL('**/mahamm');
+  await shot(mobile, '26d-phone-menu');
+  await Promise.all([mobile.waitForEvent('load'), mobile.click('.topbar form[action="/lang"] button')]);
+  note(`check: phone menu after switching language: dir = ${await mobile.getAttribute('html', 'dir')}`);
+  await shot(mobile, '26e-phone-menu-ar');
+  await mobile.goto(`${base}/home`);
+  await shot(mobile, '26f-phone-home-ar');
+  await Promise.all([mobile.waitForEvent('load'), mobile.click('.topbar form[action="/lang"] button')]);
+});
 for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tasks/${ids.pdf}`], ['28-phone-list', '/tasks'], ['28b-phone-table', '/table'], ['28c-phone-people', '/people'], ['29-phone-close', `/tasks/${ids.projector}/close`]]) {
   await step(name, async () => {
     await mobile.goto(`${base}${url}`);

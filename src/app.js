@@ -16,6 +16,7 @@ import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
 import adminRoutes from './routes/admin.js';
 import meRoutes from './routes/me.js';
+import homeRoutes from './routes/home.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -77,6 +78,26 @@ export function createApp(config, logger) {
   }));
   app.get('/favicon.ico', (req, res) => res.redirect(301, '/static/favicon.svg'));
 
+  // Lets people add the site to their phone's home screen and open it like an app.
+  app.get('/manifest.webmanifest', (req, res) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.type('application/manifest+json').send(JSON.stringify({
+      id: '/home',
+      name: config.appName,
+      short_name: config.appName,
+      start_url: '/home',
+      scope: '/',
+      display: 'standalone',
+      background_color: '#f6f7f9',
+      theme_color: '#ffffff',
+      icons: [
+        { src: '/static/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/static/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/static/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    }));
+  });
+
   app.use(express.urlencoded({ extended: false, limit: '100kb', parameterLimit: 300 }));
   app.use(express.json({ limit: '16kb' }));
   app.use(sessionMiddleware(config));
@@ -121,10 +142,11 @@ export function createApp(config, logger) {
 
   app.use(authRoutes(config));
   app.use(meRoutes(config));
+  app.use(homeRoutes(config));
   app.use(taskRoutes(config));
   app.use(adminRoutes(config));
 
-  app.get('/', (req, res) => res.redirect(req.user ? '/board' : '/login'));
+  app.get('/', (req, res) => res.redirect(req.user ? '/home' : '/login'));
 
   app.use((req, res, next) => {
     const err = new Error('not found');

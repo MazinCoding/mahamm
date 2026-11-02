@@ -1,0 +1,64 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('menu.title') }}{% endblock %}
+
+{% block content %}
+{# Icons are plain markup in the template: nothing here is ever marked safe. #}
+
+{% macro item(href, name, desc, icon, extra='') %}
+<a class="menu-item" href="{{ href }}">
+  <span class="menu-icon" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+{%- if icon == 'board' %}<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>
+{%- elif icon == 'list' %}<line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/>
+{%- elif icon == 'table' %}<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="4" x2="9" y2="20"/>
+{%- elif icon == 'plus' %}<circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+{%- elif icon == 'audit' %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{%- elif icon == 'bell' %}<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/>
+{%- elif icon == 'people' %}<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18.5 14a6.5 6.5 0 0 1 3 6"/>
+{%- elif icon == 'label' %}<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.3"/>
+{%- elif icon == 'import' %}<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
+{%- endif %}</svg></span>
+  <span class="menu-text"><span class="menu-name">{{ name }}{% if extra %} <span class="badge-inline">{{ extra }}</span>{% endif %}</span><span class="menu-desc">{{ desc }}</span></span>
+  <svg class="menu-go flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+</a>
+{% endmacro %}
+
+<div class="menu-page">
+  <div class="page-head">
+    <div>
+      <h1>{{ appName }}</h1>
+      <p class="sub">{{ t('menu.sub') }}</p>
+    </div>
+  </div>
+
+  <nav class="menu-list" aria-label="{{ t('menu.views') }}">
+    {{ item('/board', t('nav.board'), t('menu.board'), 'board') }}
+    {{ item('/tasks', t('nav.list'), t('menu.list'), 'list') }}
+    {{ item('/table', t('nav.table'), t('menu.table'), 'table') }}
+    {{ item('/tasks/new', t('task.new'), t('menu.newTask'), 'plus') }}
+    {{ item('/audit', t('nav.audit'), t('menu.audit'), 'audit') }}
+    {{ item('/notifications', t('nav.notifications'), t('menu.notifications'), 'bell', unread if unread else '') }}
+  </nav>
+
+  {% if user.isAdmin %}
+  <h2 class="menu-heading">{{ t('menu.admin') }}</h2>
+  <nav class="menu-list" aria-label="{{ t('menu.admin') }}">
+    {{ item('/people', t('nav.people'), t('menu.people'), 'people') }}
+    {{ item('/labels', t('nav.labels'), t('menu.labels'), 'label') }}
+    {{ item('/import', t('nav.import'), t('menu.import'), 'import') }}
+  </nav>
+  {% endif %}
+
+  <h2 class="menu-heading">{{ t('menu.account') }}</h2>
+  <div class="menu-list">
+    <a class="menu-item" href="/settings">
+      <span class="av av-lg {{ avatarClass(user.id) }}" aria-hidden="true">{{ initials(user.name) }}</span>
+      <span class="menu-text"><span class="menu-name"><bdi>{{ user.name }}</bdi></span><span class="menu-desc">{{ t('menu.settings') }}</span></span>
+      <svg class="menu-go flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    </a>
+    <form method="post" action="/logout" class="menu-signout">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <button class="btn btn-secondary btn-block" type="submit">{{ t('nav.signOut') }}</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
