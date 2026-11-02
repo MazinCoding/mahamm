@@ -335,26 +335,43 @@ await step('phone-home', async () => {
   note(`check: phone composer above the tab bar = ${layout.above}; last task clear of the composer = ${layout.clear} (${layout.gap}px)`);
   await mobile.screenshot({ path: path.join(out, '26i-phone-home-bottom.png') });
 
-  // Send a task, fill in a few details in the pop-up, then go back to Home.
+  // Send a task: the details sheet opens from the bottom, small enough to show
+  // its two buttons and some of Home above it.
   await mobile.fill('#composer-title', 'Refill the printer paper on floor 2');
   await Promise.all([mobile.waitForEvent('load'), mobile.press('#composer-title', 'Enter')]);
   await mobile.waitForSelector('dialog.sheet[open]');
   const here = new URL(mobile.url());
-  note(`check: after sending, address = ${here.pathname}${here.search}; pop-up open = ${(await mobile.locator('dialog.sheet[open]').count()) === 1}; message = ${(await mobile.locator('.flash').innerText()).trim()}`);
-  await mobile.screenshot({ path: path.join(out, '26j-phone-popup.png') });
-  await mobile.click('dialog.sheet button[value="priority:high"]');
-  await mobile.waitForFunction(() => document.querySelector('dialog.sheet button[value="priority:high"]').getAttribute('aria-pressed') === 'true');
-  const firstLabel = mobile.locator('dialog.sheet [data-group="label"] button').first();
-  await firstLabel.click();
-  await mobile.waitForFunction(() => document.querySelector('dialog.sheet [data-group="label"] button').getAttribute('aria-pressed') === 'true');
-  await mobile.click('dialog.sheet [data-due-in="1"]');
-  await mobile.waitForFunction(() => document.querySelector('[data-no-due]').hidden);
-  note(`check: pop-up after High, a label and Tomorrow = ${(await mobile.locator('[data-added-status]').innerText()).trim()}; due field = ${await mobile.inputValue('#ag-due-input')}`);
-  await mobile.screenshot({ path: path.join(out, '26k-phone-popup-filled.png') });
-  await Promise.all([mobile.waitForURL((u) => u.pathname === '/home' && !u.search), mobile.click('[data-added-done]')]);
-  const added = mobile.locator('.my-task', { hasText: 'Refill the printer paper on floor 2' });
-  note(`check: back on Home, the new task shows: ${(await added.innerText()).replace(/\s+/g, ' ').trim()}`);
-  await shot(mobile, '26l-phone-home-after-popup');
+  const fit = await mobile.evaluate(() => {
+    const sheet = document.querySelector('dialog.sheet').getBoundingClientRect();
+    const foot = document.querySelector('.added-foot').getBoundingClientRect();
+    return { share: Math.round((sheet.height / window.innerHeight) * 100), footVisible: foot.bottom <= window.innerHeight + 1 && foot.top >= sheet.top, sideways: document.querySelector('.added-body').scrollWidth > document.querySelector('.added-body').clientWidth + 1 };
+  });
+  note(`check: after sending, address = ${here.pathname}${here.search}; sheet open; it takes ${fit.share}% of the screen; both buttons visible = ${fit.footVisible}; sheet scrolls sideways = ${fit.sideways}`);
+  await mobile.screenshot({ path: path.join(out, '26j-phone-sheet.png') });
+
+  // Choosing shows a tick but saves nothing until Submit details.
+  await mobile.click('dialog.sheet label.pick:has(input[name="priority"][value="high"])');
+  await mobile.click('dialog.sheet label.pick:has(input[name="labels"])');
+  await mobile.click('dialog.sheet label.pick:has(input[name="due_when"][value="tomorrow"])');
+  const ticked = await mobile.evaluate(() => [...document.querySelectorAll('dialog.sheet .pick')].filter((p) => p.querySelector('input:checked')).map((p) => `${p.textContent.trim()}(${getComputedStyle(p).backgroundColor})`).join(', '));
+  note(`check: ticked in the sheet = ${ticked}`);
+  await mobile.screenshot({ path: path.join(out, '26k-phone-sheet-chosen.png') });
+  await Promise.all([mobile.waitForURL((u) => u.pathname === '/home' && !u.search), mobile.click('dialog.sheet button[type="submit"]')]);
+  const added = mobile.locator('[aria-labelledby="mine-title"] .my-task', { hasText: 'Refill the printer paper on floor 2' });
+  note(`check: after Submit details = ${(await mobile.locator('.flash').innerText()).trim().replace(/\s+/g, ' ')}; the task shows: ${(await added.innerText()).replace(/\s+/g, ' ').trim()}`);
+  await shot(mobile, '26l-phone-home-after-details');
+
+  // "Add details later" closes the sheet without saving or reloading.
+  await mobile.fill('#composer-title', 'Water the plants in reception');
+  await Promise.all([mobile.waitForEvent('load'), mobile.press('#composer-title', 'Enter')]);
+  await mobile.waitForSelector('dialog.sheet[open]');
+  await mobile.click('dialog.sheet label.pick:has(input[name="priority"][value="low"])');
+  await mobile.click('dialog.sheet [data-later]');
+  await mobile.waitForSelector('dialog.sheet', { state: 'detached' });
+  const kept = mobile.locator('[aria-labelledby="mine-title"] .my-task', { hasText: 'Water the plants in reception' });
+  note(`check: after Add details later, address = ${new URL(mobile.url()).pathname}${new URL(mobile.url()).search}; the task still shows ${(await kept.locator('.prio').innerText()).trim()} until reloaded`);
+  await mobile.reload();
+  note(`check: after reloading, its priority is still ${(await mobile.locator('[aria-labelledby="mine-title"] .my-task', { hasText: 'Water the plants in reception' }).locator('.prio').innerText()).trim()}; sheet opens again = ${await mobile.locator('dialog.sheet').count()}`);
   await mobile.locator('.tabbar a[href="/mahamm"]').click();
   await mobile.waitForURL('**/mahamm');
   await shot(mobile, '26d-phone-menu');

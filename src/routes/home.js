@@ -36,7 +36,8 @@ export default function homeRoutes(config) {
       suggested,
       added,
       labels: added ? await labelsFor(added) : [],
-      assignable: added ? await activePeople() : [],
+      // People who could be added: active, and not on the task already.
+      others: added ? (await activePeople()).filter((p) => !added.assignees.some((a) => a.id === p.id)) : [],
       today,
       overdue: mine.filter((t) => t.due_date && t.due_date < today).length,
       firstName: String(req.user.name || '').trim().split(/\s+/)[0],

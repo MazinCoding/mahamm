@@ -783,10 +783,6 @@
     "andN": "and {n} more",
     "join": "Join",
     "added": "Added {n} to your tasks, In progress.",
-    "addedTitle": "Added {n}",
-    "addedHint": "Want to add details? Tap any of these. Each one saves straight away, and all of them are optional.",
-    "openTask": "Open task",
-    "addedDone": "All set",
     "today": "Today",
     "tomorrow": "Tomorrow",
     "composerLabel": "What are you working on?",
@@ -815,5 +811,18 @@
     "done": "You joined {n}. It's in My tasks now.",
     "already": "You're already on {n}.",
     "closed": "{n} is already closed, so it can't be joined."
+  },
+  "details": {
+    "title": "Add details to {n}",
+    "hint": "All optional. Pick what you know, then tap Submit details.",
+    "later": "Add details later",
+    "submit": "Submit details",
+    "addPerson": "Add someone…",
+    "dueNone": "No date",
+    "dueOn": "On a date",
+    "saved": "Details saved for {n}.",
+    "pickDate": "Pick a date first, or choose another due date option.",
+    "invalid": "Those details couldn't be saved. Check them and try again.",
+    "closed": "{n} is already closed, so its details can't be changed here."
   }
 }

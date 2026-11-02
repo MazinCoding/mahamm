@@ -356,102 +356,55 @@
     });
   });
 
-  // Home, after the composer adds a task: open its details panel as a pop-up.
-  // Each button saves straight away and is shown as chosen; the server's message
-  // goes in the pop-up. Leaving reloads Home so My tasks shows the details.
+  // Home, after the composer adds a task: show its details form as a sheet.
+  // Nothing is saved until "Submit details"; "Add details later" just closes it.
   var panel = document.querySelector('[data-added-panel]');
-  if (panel && typeof HTMLDialogElement === 'function' && window.fetch) {
-    var addedForm = panel.querySelector('[data-added-form]');
-    var addedStatus = panel.querySelector('[data-added-status]');
-    var taskIdAdded = panel.getAttribute('data-task-id');
-    var people = panel.querySelector('[data-people]');
-    var noDue = panel.querySelector('[data-no-due]');
-    var dueInput = addedForm.querySelector('[name="due"]');
-    var personSelect = addedForm.querySelector('[name="assignee"]');
+  if (panel && typeof HTMLDialogElement === 'function') {
     var sheet = document.createElement('dialog');
     sheet.className = 'sheet';
     sheet.setAttribute('aria-labelledby', 'added-title');
     panel.parentNode.insertBefore(sheet, panel);
     sheet.appendChild(panel);
-    var leave = function () { window.location.href = '/home'; };
-    var tell = function (text, warn) {
-      addedStatus.textContent = text || '';
-      addedStatus.classList.toggle('is-warn', !!warn);
+    var later = function () {
+      sheet.close();
+      sheet.remove();
+      // Forget ?added= so a reload doesn't open it again.
+      try { window.history.replaceState(null, '', '/home'); } catch (e) { /* the address just stays */ }
     };
-    var press = function (btn, on) { btn.setAttribute('aria-pressed', on ? 'true' : 'false'); };
-    var togglePerson = function (id, name) {
-      var chip = people.querySelector('[data-person="' + id + '"]');
-      if (chip) chip.remove();
-      else {
-        var empty = people.querySelector('.missing');
-        if (empty) empty.remove();
-        chip = document.createElement('span');
-        chip.className = 'chip';
-        chip.setAttribute('data-person', id);
-        var bdi = document.createElement('bdi');
-        bdi.textContent = name;
-        chip.appendChild(bdi);
-        people.appendChild(chip);
-      }
-      if (!people.querySelector('[data-person]')) {
-        var none = document.createElement('span');
-        none.className = 'missing';
-        none.textContent = people.getAttribute('data-none');
-        people.appendChild(none);
-      }
-    };
-    // Show what was saved: one choice for status and priority, toggles for labels and people.
-    var showSaved = function (btn, payload) {
-      var group = btn.closest('[data-group]');
-      var kind = group ? group.getAttribute('data-group') : '';
-      if (payload.apply === 'due' || payload.apply === 'due-clear') kind = 'due';
-      if (kind === 'status' || kind === 'priority') {
-        group.querySelectorAll('button[aria-pressed]').forEach(function (b) { press(b, b === btn); });
-      } else if (kind === 'label') {
-        press(btn, btn.getAttribute('aria-pressed') !== 'true');
-      } else if (kind === 'assignee' && personSelect.selectedIndex >= 0) {
-        togglePerson(payload.assignee, personSelect.options[personSelect.selectedIndex].text);
-      } else if (kind === 'due') {
-        if (payload.apply === 'due-clear') dueInput.value = '';
-        noDue.hidden = !!dueInput.value;
-      }
-    };
-    var save = function (btn, payload) {
-      tell('');
-      fetch('/tasks/bulk', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrf },
-        body: JSON.stringify({ ids: [Number(taskIdAdded)], apply: payload.apply, assignee: payload.assignee, due: payload.due, back: '/home', quiet: true }),
-      }).then(function (res) {
-        return res.json().then(function (body) { return { ok: res.ok, body: body }; });
-      }).then(function (r) {
-        if (!r.ok) { tell((r.body && (r.body.message || r.body.error)) || addedForm.getAttribute('data-msg-failed'), true); return; }
-        if (r.body.redirect) { window.location.href = r.body.redirect; return; }
-        showSaved(btn, payload);
-        tell(r.body.message);
-      }).catch(function () { tell(addedForm.getAttribute('data-msg-failed'), true); });
-    };
-    addedForm.addEventListener('submit', function (e) {
-      var btn = e.submitter;
-      if (!btn || btn.name !== 'apply') return;
-      e.preventDefault();
-      save(btn, { apply: btn.value, assignee: personSelect ? personSelect.value : '', due: dueInput ? dueInput.value : '' });
-    });
-    // Today and Tomorrow fill in the date and save it.
-    panel.querySelectorAll('[data-due-in]').forEach(function (btn) {
-      btn.hidden = false;
-      btn.addEventListener('click', function () {
-        var d = new Date();
-        d.setDate(d.getDate() + Number(btn.getAttribute('data-due-in')));
-        var pad = function (n) { return (n < 10 ? '0' : '') + n; };
-        dueInput.value = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
-        save(btn, { apply: 'due', assignee: '', due: dueInput.value });
+    panel.querySelector('[data-later]').addEventListener('click', function (e) { e.preventDefault(); later(); });
+    sheet.addEventListener('cancel', function (e) { e.preventDefault(); later(); });
+    sheet.addEventListener('click', function (e) { if (e.target === sheet) later(); });
+
+    // Choosing a date also chooses "On a date".
+    var dueDate = panel.querySelector('[name="due_date"]');
+    var onDate = panel.querySelector('[name="due_when"][value="date"]');
+    if (dueDate && onDate) dueDate.addEventListener('change', function () { if (dueDate.value) onDate.checked = true; });
+
+    // Someone picked from "Add someone…" becomes a ticked chip, so several can be added.
+    var addPerson = panel.querySelector('[name="add_assignee"]');
+    var peopleRow = panel.querySelector('[data-people]');
+    if (addPerson && peopleRow) {
+      addPerson.addEventListener('change', function () {
+        var opt = addPerson.options[addPerson.selectedIndex];
+        if (!opt || !opt.value) return;
+        var chip = document.createElement('label');
+        chip.className = 'pick';
+        var box = document.createElement('input');
+        box.className = 'sr-only';
+        box.type = 'checkbox';
+        box.name = 'assignees';
+        box.value = opt.value;
+        box.checked = true;
+        var name = document.createElement('bdi');
+        name.textContent = opt.text;
+        chip.appendChild(box);
+        chip.appendChild(name);
+        peopleRow.insertBefore(chip, peopleRow.querySelector('label[for="add-person"]'));
+        opt.remove();
+        addPerson.selectedIndex = 0;
       });
-    });
-    panel.querySelector('[data-added-done]').addEventListener('click', function (e) { e.preventDefault(); leave(); });
-    sheet.addEventListener('cancel', function (e) { e.preventDefault(); leave(); });
-    sheet.addEventListener('click', function (e) { if (e.target === sheet) leave(); });
+    }
+
     sheet.showModal();
     panel.querySelector('#added-title').focus();
   }
