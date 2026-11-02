@@ -48,7 +48,7 @@ describe('suggested tasks', () => {
     assert.deepEqual([...at].sort((a, b) => a - b), at, 'in the agreed order');
     assert.equal(html.indexOf(`data-task-id="${ids.lowMine}"`), -1, 'not tasks I am already on');
     assert.equal(html.indexOf(`data-task-id="${ids.closed}"`), -1, 'not closed tasks');
-    assert.match(html, /Open tasks you're not on yet: 7\./);
+    assert.match(html, /Open tasks you&#39;re not on yet: 7\./);
   });
 
   test('Home shows the first five and links to the rest; who is on it is shown, or "Nobody yet"', async () => {
@@ -75,7 +75,7 @@ describe('joining', () => {
     assert.ok(ev.details.batch);
 
     const home = (await aishaAgent.get('/home')).text;
-    assert.match(home, new RegExp(`You joined #${ids.highOld}\\. It's in My tasks now\\.`));
+    assert.match(home, new RegExp(`You joined #${ids.highOld}\\. It&#39;s in My tasks now\\.`));
     assert.match(home, /action="\/tasks\/bulk\/undo"/);
     const myList = home.slice(home.indexOf('id="mine-title"'));
     assert.match(myList, new RegExp(`data-task-id="${ids.highOld}"`), 'now in My tasks');
@@ -91,7 +91,7 @@ describe('joining', () => {
     const before = (await auditFor(ids.highOthers)).length;
     await join(aishaAgent, ids.highOthers);
     assert.equal((await auditFor(ids.highOthers)).length, before);
-    assert.match((await aishaAgent.get('/home')).text, new RegExp(`You're already on #${ids.highOthers}\\.`));
+    assert.match((await aishaAgent.get('/home')).text, new RegExp(`You&#39;re already on #${ids.highOthers}\\.`));
   });
 
   test('joining gives the same edit rights as any assignee', async () => {
