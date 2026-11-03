@@ -57,4 +57,33 @@
     <a class="btn btn-primary" href="/settings/two-factor">{{ t('settings.turnOn') }}</a>
   {% endif %}
 </section>
+
+{% if me.totp_enabled %}
+<section class="card-form" id="devices">
+  <h2 class="section-title">{{ t('settings.devices') }}</h2>
+  <p class="hint">{{ t('settings.devicesHint', { n: rememberDays }) }}</p>
+  {% if devices.length %}
+  <ul class="device-list">
+    {% for d in devices %}
+    <li class="device">
+      <div class="device-info">
+        <span class="strong"><bdi>{{ d.label }}</bdi></span>{% if d.current %} <span class="chip">{{ t('settings.thisDevice') }}</span>{% endif %}
+        <span class="muted small">{{ t('settings.deviceUsed', { d: fmt.date(d.last_used_at) }) }} · {{ t('settings.deviceUntil', { d: fmt.date(d.expires_at) }) }}</span>
+      </div>
+      <form method="post" action="/settings/devices/{{ d.id }}/forget">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+        <button class="btn btn-secondary btn-sm" type="submit">{{ t('settings.forgetDevice') }}</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  <form class="form-actions" method="post" action="/settings/devices/forget-all" data-confirm="{{ t('settings.confirmForgetAll') }}">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <button class="btn btn-secondary" type="submit">{{ t('settings.forgetAll') }}</button>
+  </form>
+  {% else %}
+  <p class="muted">{{ t('settings.noDevices') }}</p>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

@@ -378,7 +378,11 @@
     "invitedPerson": "invited {person} as {role} ({email})",
     "inviteAcceptedRenamed": "accepted their invite and changed their name from “{from}”",
     "personAdded": "added {name} without an account",
-    "personRenamed": "renamed “{from}” to “{to}”"
+    "personRenamed": "renamed “{from}” to “{to}”",
+    "signedInRemembered": "signed in on a remembered device",
+    "deviceRemembered": "remembered a device ({device})",
+    "deviceForgotten": "forgot a device ({device})",
+    "devicesForgotten": "forgot all remembered devices ({count})"
   },
   "act": {
     "task": {
@@ -586,7 +590,18 @@
     "wrongPassword": "Your current password isn’t right.",
     "passwordChanged": "Password changed. You were signed out on your other devices.",
     "disableFailed": "That password or code isn’t right.",
-    "twoFactorOff": "Two-step verification is off."
+    "twoFactorOff": "Two-step verification is off.",
+    "devices": "Remembered devices",
+    "devicesHint": "These browsers skip the two-step code (your password is still needed) for up to {n} days. Changing or resetting your password forgets them all.",
+    "thisDevice": "This device",
+    "deviceUsed": "Last used {d}",
+    "deviceUntil": "until {d}",
+    "forgetDevice": "Forget",
+    "forgetAll": "Forget all devices",
+    "confirmForgetAll": "Forget every remembered device? Each one will ask for a code at the next sign-in.",
+    "noDevices": "No remembered devices. Tick “Remember this device” when you enter a code to add one.",
+    "deviceForgotten": "Device forgotten. It will ask for a code next time.",
+    "devicesForgotten": "All devices forgotten. Each will ask for a code next time."
   },
   "twoFactor": {
     "title": "Set up two-step verification",
@@ -647,7 +662,10 @@
     "createAccount": "Create account",
     "inviteExpiry": "This invite expires on {d}.",
     "nameRequired": "Add your name (up to 100 characters).",
-    "nameTaken": "Someone active already uses that name. Add a surname or initial."
+    "nameTaken": "Someone active already uses that name. Add a surname or initial.",
+    "keepSignedIn": "Keep me signed in",
+    "rememberDevice": "Remember this device for {n} days",
+    "rememberHint": "You’ll still need your password here, just not a code. Don’t tick this on a shared computer."
   },
   "setup": {
     "title": "Set up the workspace",

@@ -15,7 +15,10 @@
     <label for="password">{{ t('auth.password') }}</label>
     <input id="password" class="input" type="password" name="password" autocomplete="current-password" required maxlength="129">
   </div>
-  <p class="end"><a class="link-sm" href="/forgot">{{ t('auth.forgot') }}</a></p>
+  <div class="auth-row">
+    <label class="check-inline"><input type="checkbox" name="keep" value="on" {% if keep %}checked{% endif %}> {{ t('auth.keepSignedIn') }}</label>
+    <a class="link-sm" href="/forgot">{{ t('auth.forgot') }}</a>
+  </div>
   <button class="btn btn-primary btn-block" type="submit">{{ t('auth.signIn') }}</button>
 </form>
 <p class="auth-foot">{{ t('auth.inviteOnly') }}</p>

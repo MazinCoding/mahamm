@@ -11,6 +11,10 @@
     <input id="code" class="input input-code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="40" autofocus>
     <p class="hint">{{ t('auth.recoveryHint') }}</p>
   </div>
+  <div class="field">
+    <label class="check-inline"><input type="checkbox" name="remember" value="on" {% if remember %}checked{% endif %}> {{ t('auth.rememberDevice', { n: days }) }}</label>
+    <p class="hint">{{ t('auth.rememberHint') }}</p>
+  </div>
   <button class="btn btn-primary btn-block" type="submit">{{ t('auth.verify') }}</button>
 </form>
 <p class="auth-foot"><a class="link-sm" href="/login">{{ t('auth.startOver') }}</a></p>
