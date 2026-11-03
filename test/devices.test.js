@@ -210,6 +210,7 @@ describe('remember this device', () => {
     const two = await agent.get('/login/two-factor');
     assert.match(two.text, /تذكّر هذا الجهاز لمدة 90 يومًا/);
     await codeStep(agent, user, { remember: true });
+    await post(agent, '/lang', { lang: 'ar', next: '/settings' }, '/settings');
     const settings = await agent.get('/settings');
     assert.match(settings.text, /الأجهزة المحفوظة/);
     assert.match(settings.text, /هذا الجهاز/);

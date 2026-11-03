@@ -105,7 +105,11 @@ export function loadUser() {
     const tooOld = !req.session.createdAt || !user || Date.now() - req.session.createdAt > lifetimeMs(req.session, user.role);
     const stale = !user || req.session.pwv !== new Date(user.password_changed_at).toISOString();
     if (!user || user.status !== 'active' || !user.email || tooOld || stale) {
-      await destroySession(req);
+      // Swap in a fresh, signed-out session (not none at all): later middleware
+      // still needs one for the CSRF token and the chosen language.
+      const lang = req.session.lang;
+      await regenerate(req);
+      req.session.lang = lang;
       return next();
     }
     req.user = user;
