@@ -1,6 +1,7 @@
 import express from 'express';
 import { audit } from '../audit.js';
 import { destroySession, startPendingSession, startSession } from '../auth.js';
+import { rememberDays, rememberDevice, validDevice } from '../devices.js';
 import { decryptField, hashRecoveryCode, hashToken, safeEqual } from '../crypto.js';
 import { one, q, tx } from '../db.js';
 import { LANGS, translator } from '../i18n.js';
@@ -18,6 +19,7 @@ const FAIL_WINDOW = 15 * 60;
 
 const readEmail = (v) => cleanLine(v).toLowerCase().slice(0, 254);
 const readPassword = (v) => String(v ?? '').slice(0, MAX_LENGTH + 1);
+const ticked = (v) => v === 'on' || v === '1';
 
 export default function authRoutes(config) {
   const r = express.Router();
@@ -32,14 +34,15 @@ export default function authRoutes(config) {
     const email = readEmail(req.body.email);
     const password = readPassword(req.body.password);
     const next = safeLocalPath(req.body.next, '');
-    const fail = (key, status) => res.status(status).render('auth/login.njk', { next, email, error: req.t(key) });
+    const keep = ticked(req.body.keep);
+    const fail = (key, status) => res.status(status).render('auth/login.njk', { next, email, keep, error: req.t(key) });
 
     await enforce(`login-ip:${req.ip}`, 30, FAIL_WINDOW);
     const failKey = `login-fail:${hashToken(email)}`;
     if ((await peek(failKey)).count >= MAX_FAILS) return fail('auth.paused', 429);
 
     const user = email
-      ? await one('SELECT id, email, name, password_hash, status, totp_enabled, password_changed_at FROM users WHERE email = $1', [email])
+      ? await one('SELECT id, email, name, role, password_hash, status, totp_enabled, password_changed_at FROM users WHERE email = $1', [email])
       : null;
     let ok = false;
     if (user && user.status === 'active' && user.password_hash) ok = await verifyPassword(user.password_hash, password);
@@ -58,11 +61,22 @@ export default function authRoutes(config) {
       await q('UPDATE users SET password_hash = $2 WHERE id = $1', [user.id, await hashPassword(password)]);
     }
     if (user.totp_enabled) {
+      // A browser remembered after an earlier code skips the code, never the password.
+      const device = await validDevice(req, config, user);
+      if (device) {
+        await startSession(req, user, { keep });
+        await audit({ query: q }, {
+          actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, details: { two_factor: 'remembered_device', device: device.id }, ip: req.ip,
+        });
+        return res.redirect(next || '/home');
+      }
       await startPendingSession(req, user);
       req.session.pendingNext = next;
+      req.session.pendingKeep = keep;
+      req.session.pendingRole = user.role;
       return res.redirect('/login/two-factor');
     }
-    await startSession(req, user);
+    await startSession(req, user, { keep });
     await audit({ query: q }, { actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, ip: req.ip });
     return res.redirect(next || '/home');
   });
@@ -75,7 +89,7 @@ export default function authRoutes(config) {
 
   r.get('/login/two-factor', (req, res) => {
     if (!pendingUser(req)) return res.redirect('/login');
-    res.render('auth/two-factor.njk', {});
+    res.render('auth/two-factor.njk', { remember: false, days: rememberDays(req.session.pendingRole) });
   });
 
   r.post('/login/two-factor', async (req, res) => {
@@ -89,7 +103,7 @@ export default function authRoutes(config) {
       return res.status(429).render('auth/login.njk', { next: '', email: '', error: req.t('auth.paused') });
     }
     const user = await one(
-      'SELECT id, email, name, totp_secret_enc, totp_last_step, recovery_codes, password_changed_at FROM users WHERE id = $1 AND status = $2',
+      'SELECT id, email, name, role, totp_secret_enc, totp_last_step, recovery_codes, password_changed_at FROM users WHERE id = $1 AND status = $2',
       [userId, 'active'],
     );
     if (!user || !user.totp_secret_enc) return res.redirect('/login');
@@ -111,10 +125,18 @@ export default function authRoutes(config) {
       ok = upd.rowCount === 1;
       usedRecovery = ok;
     }
-    if (!ok) return res.status(401).render('auth/two-factor.njk', { error: req.t('auth.badCode') });
+    const remember = ticked(req.body.remember);
+    if (!ok) return res.status(401).render('auth/two-factor.njk', { remember, days: rememberDays(user.role), error: req.t('auth.badCode') });
     const next = safeLocalPath(req.session.pendingNext, '');
-    await startSession(req, user);
+    const keep = req.session.pendingKeep === true;
+    await startSession(req, user, { keep });
     await clear(`2fa:${userId}`);
+    if (remember) {
+      const device = await rememberDevice(req, res, config, user);
+      await audit({ query: q }, {
+        actorId: user.id, action: 'auth.device_remembered', subjectUserId: user.id, details: { device: device.id, label: device.label }, ip: req.ip,
+      });
+    }
     if (usedRecovery) await audit({ query: q }, { actorId: user.id, action: 'auth.recovery_code_used', subjectUserId: user.id, ip: req.ip });
     await audit({ query: q }, { actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, details: { two_factor: true }, ip: req.ip });
     if (usedRecovery) req.session.flash = { type: 'warn', text: req.t('auth.recoveryUsed') };

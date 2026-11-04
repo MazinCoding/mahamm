@@ -80,9 +80,12 @@ await page.goto(`${base}/login`);
 await shot(page, '01-login');
 await page.fill('#email', admin.email);
 await page.fill('#password', process.env.DEMO_PASSWORD);
+await page.check('input[name=keep]');
 await page.click('form[action="/login"] button[type=submit]');
 await page.waitForURL('**/login/two-factor');
+await page.check('input[name=remember]');
 await shot(page, '02-two-factor');
+note(`check: two-step page offers "${(await page.locator('label:has(input[name=remember])').innerText()).trim()}"`);
 await page.fill('#code', currentCode(secret));
 await page.click('form[action="/login/two-factor"] button[type=submit]');
 await page.waitForURL('**/home');
@@ -388,6 +391,30 @@ for (const [name, url] of [['26-phone-board', '/board'], ['27-phone-task', `/tas
     await shot(mobile, name);
   });
 }
+// Remembered device: sign out, then sign in with the password only.
+await step('remembered-device', async () => {
+  await page.goto(`${base}/settings#devices`);
+  note(`check: remembered devices listed = ${await page.locator('.device').count()}; marked this device = ${await page.locator('.device .chip').count()}`);
+  await shot(page, '17b-settings-devices');
+  const cookies = await desktop.cookies();
+  const sid = cookies.find((c) => c.name.endsWith('mahamm.sid'));
+  note(`check: keep-me-signed-in cookie lasts ${sid && sid.expires > 0 ? Math.round((sid.expires * 1000 - Date.now()) / 86_400_000) : 0} days`);
+  await Promise.all([page.waitForURL('**/login'), page.evaluate(() => document.querySelector('form[action="/logout"]').submit())]);
+  await page.fill('#email', admin.email);
+  await page.fill('#password', process.env.DEMO_PASSWORD);
+  await page.click('form[action="/login"] button[type=submit]');
+  await page.waitForLoadState('networkidle');
+  note(`check: second sign-in on a remembered device lands on ${new URL(page.url()).pathname} (two-step skipped = ${!page.url().includes('two-factor')})`);
+  await page.goto(`${base}/settings#devices`);
+  await page.click('.topbar form[action="/lang"] button');
+  await page.waitForLoadState('networkidle');
+  const box = await page.locator('#devices').boundingBox();
+  note(`check: Arabic devices section visible = ${!!box && box.width > 0}, dir = ${await page.getAttribute('html', 'dir')}`);
+  await shot(page, '17c-settings-devices-ar');
+  await page.click('.topbar form[action="/lang"] button');
+  await page.waitForLoadState('networkidle');
+});
+
 const anon = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true });
 const anonPage = await anon.newPage();
 await anonPage.goto(`${base}/login`);

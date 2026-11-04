@@ -539,3 +539,10 @@ dialog.sheet .added-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-d
   dialog.sheet .sheet-grip { display: block; width: 36px; height: 4px; margin: 0 auto 10px; border-radius: 2px; background: var(--border-strong); }
   dialog.sheet .added-foot { padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
 }
+
+/* Sign-in options and remembered devices */
+.auth-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 16px; }
+.device-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.device { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.device:last-child { border-bottom: 0; }
+.device-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }

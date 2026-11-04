@@ -8,6 +8,7 @@ export const GROUPS = {
   account: [
     'setup.completed', 'auth.signed_in', 'auth.signin_paused', 'auth.password_changed', 'auth.password_reset',
     'auth.two_factor_enabled', 'auth.two_factor_disabled', 'auth.recovery_code_used',
+    'auth.device_remembered', 'auth.device_forgotten', 'auth.devices_forgotten',
     'user.invited', 'invite.revoked', 'invite.accepted', 'user.role_changed', 'user.disabled', 'user.enabled',
     'person.added', 'person.renamed',
     'user.reset_link_created', 'label.created', 'label.updated', 'audit.exported', 'settings.wip_limit_changed',
@@ -77,13 +78,16 @@ export function describe(ev, t, { names = {}, labels = {} } = {}) {
     }
     case 'import.completed': return t('ev.importCompleted', { count: d.count ?? 0, skipped: d.skipped ?? 0, file: d.file || '' });
     case 'setup.completed': return t('ev.setup');
-    case 'auth.signed_in': return t('ev.signedIn');
+    case 'auth.signed_in': return d.two_factor === 'remembered_device' ? t('ev.signedInRemembered') : t('ev.signedIn');
     case 'auth.signin_paused': return t('ev.signinPaused', { email: d.email || '' });
     case 'auth.password_changed': return t('ev.passwordChanged');
     case 'auth.password_reset': return t('ev.passwordReset');
     case 'auth.two_factor_enabled': return t('ev.twoFactorOn');
     case 'auth.two_factor_disabled': return t('ev.twoFactorOff');
     case 'auth.recovery_code_used': return t('ev.recoveryUsed');
+    case 'auth.device_remembered': return t('ev.deviceRemembered', { device: clip(d.label) });
+    case 'auth.device_forgotten': return t('ev.deviceForgotten', { device: clip(d.label) });
+    case 'auth.devices_forgotten': return t('ev.devicesForgotten', { count: d.count ?? 0 });
     case 'user.invited':
       if (d.user_id) return t('ev.invitedPerson', { email: d.email || '', role: t(`role.${d.role}`), person: who(d.user_id) });
       return t('ev.invited', { email: d.email || '', role: t(`role.${d.role}`) });

@@ -2,9 +2,13 @@ import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { csrfSync } from 'csrf-sync';
 import { getPool, q } from './db.js';
+import { forgetAllDevices, rememberMs } from './devices.js';
 
 const ABSOLUTE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000; // sign in again at least weekly
 const IDLE_TIMEOUT_MS = 12 * 60 * 60 * 1000; // or after 12 hours without activity
+// "Keep me signed in" sessions last up to the remembered-device period for the
+// person's current role (30 days for admins, 90 for members), renewed on use.
+const lifetimeMs = (session, role) => (session.keep ? rememberMs(role) : ABSOLUTE_LIFETIME_MS);
 
 export function sessionMiddleware(config) {
   const PgStore = connectPgSimple(session);
@@ -60,13 +64,19 @@ export function destroySession(req) {
 }
 
 // New session id on every sign-in (prevents session fixation).
-export async function startSession(req, user) {
+// With `keep`, the cookie outlives the browser and the idle timeout grows to
+// the keep-signed-in period for the person's role.
+export async function startSession(req, user, { keep = false } = {}) {
   const lang = req.session?.lang;
   await regenerate(req);
   req.session.userId = user.id;
   req.session.pwv = new Date(user.password_changed_at).toISOString();
   req.session.createdAt = Date.now();
   req.session.lang = lang;
+  if (keep && user.role) {
+    req.session.keep = true;
+    req.session.cookie.maxAge = rememberMs(user.role);
+  }
   await save(req);
 }
 
@@ -80,8 +90,11 @@ export async function startPendingSession(req, user) {
   await save(req);
 }
 
+// Used on a password change or reset and when an account is disabled: every
+// other session ends and every remembered device has to give a code again.
 export async function signOutEverywhere(userId, exceptSid = null) {
   await q(`DELETE FROM "session" WHERE sess->>'userId' = $1 AND sid IS DISTINCT FROM $2`, [userId, exceptSid]);
+  await forgetAllDevices(userId);
 }
 
 export function loadUser() {
@@ -89,10 +102,14 @@ export function loadUser() {
     const id = req.session?.userId;
     if (!id) return next();
     const user = await findUserById(id);
-    const tooOld = !req.session.createdAt || Date.now() - req.session.createdAt > ABSOLUTE_LIFETIME_MS;
+    const tooOld = !req.session.createdAt || !user || Date.now() - req.session.createdAt > lifetimeMs(req.session, user.role);
     const stale = !user || req.session.pwv !== new Date(user.password_changed_at).toISOString();
     if (!user || user.status !== 'active' || !user.email || tooOld || stale) {
-      await destroySession(req);
+      // Swap in a fresh, signed-out session (not none at all): later middleware
+      // still needs one for the CSRF token and the chosen language.
+      const lang = req.session.lang;
+      await regenerate(req);
+      req.session.lang = lang;
       return next();
     }
     req.user = user;

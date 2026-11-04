@@ -6,6 +6,7 @@ import { createLogger } from './logger.js';
 import { initMail, processOutbox, pruneOutbox } from './mail.js';
 import { initNotify } from './notify.js';
 import { pruneRateLimits } from './ratelimit.js';
+import { pruneDevices } from './devices.js';
 
 let config;
 try {
@@ -31,7 +32,7 @@ const server = app.listen(config.port, () => logger.info({ port: config.port }, 
 // Background jobs: send queued emails, tidy expired counters.
 const timers = [
   setInterval(() => processOutbox().catch((err) => logger.error({ err }, 'outbox failed')), 20_000),
-  setInterval(() => Promise.all([pruneRateLimits(), pruneOutbox()]).catch((err) => logger.error({ err }, 'cleanup failed')), 60 * 60_000),
+  setInterval(() => Promise.all([pruneRateLimits(), pruneOutbox(), pruneDevices()]).catch((err) => logger.error({ err }, 'cleanup failed')), 60 * 60_000),
 ];
 
 async function shutdown(signal) {

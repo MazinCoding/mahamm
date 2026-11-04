@@ -1,7 +1,8 @@
 import express from 'express';
 import { audit } from '../audit.js';
 import { requireAuth, signOutEverywhere, startSession } from '../auth.js';
-import { decryptField, encryptField, hashRecoveryCode, newRecoveryCodes } from '../crypto.js';
+import { decryptField, encryptField, hashRecoveryCode, hashToken, newRecoveryCodes } from '../crypto.js';
+import { clearDeviceCookie, deviceTokenFrom, forgetAllDevices, forgetDevice, listDevices, rememberDays } from '../devices.js';
 import { one, q } from '../db.js';
 import { hashPassword, passwordProblem, verifyPassword, MAX_LENGTH } from '../passwords.js';
 import { enforce } from '../ratelimit.js';
@@ -10,6 +11,7 @@ import { HttpError } from '../services/tasks.js';
 import { parse, profileSchema } from '../validation.js';
 
 const readPassword = (v) => String(v ?? '').slice(0, MAX_LENGTH + 1);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export default function meRoutes(config) {
   const r = express.Router();
@@ -42,7 +44,10 @@ export default function meRoutes(config) {
 
   r.get('/settings', requireAuth, async (req, res) => {
     const me = await one('SELECT name, email, lang, email_notifications, totp_enabled, cardinality(recovery_codes) AS codes_left FROM users WHERE id = $1', [req.user.id]);
-    res.render('settings/index.njk', { me, errors: {} });
+    const mine = deviceTokenFrom(req, config);
+    const mineHash = mine ? hashToken(mine) : null;
+    const devices = (await listDevices(req.user.id)).map(({ token_hash: th, ...d }) => ({ ...d, current: th === mineHash }));
+    res.render('settings/index.njk', { me, devices, rememberDays: rememberDays(req.user.role), errors: {} });
   });
 
   r.post('/settings/profile', requireAuth, async (req, res) => {
@@ -77,8 +82,9 @@ export default function meRoutes(config) {
     );
     await audit({ query: q }, { actorId: user.id, action: 'auth.password_changed', subjectUserId: user.id, ip: req.ip });
     // Every other session ends; this one continues with a fresh id.
+    const keep = req.session.keep === true;
     await signOutEverywhere(user.id);
-    await startSession(req, updated);
+    await startSession(req, { ...updated, role: req.user.role }, { keep });
     req.session.flash = { type: 'ok', text: req.t('settings.passwordChanged') };
     res.redirect('/settings');
   });
@@ -127,9 +133,37 @@ export default function meRoutes(config) {
       return res.redirect('/settings#two-factor');
     }
     await q(`UPDATE users SET totp_enabled = false, totp_secret_enc = NULL, totp_last_step = 0, recovery_codes = '{}' WHERE id = $1`, [req.user.id]);
+    await forgetAllDevices(req.user.id);
+    clearDeviceCookie(res, config);
     await audit({ query: q }, { actorId: req.user.id, action: 'auth.two_factor_disabled', subjectUserId: req.user.id, ip: req.ip });
     req.session.flash = { type: 'ok', text: req.t('settings.twoFactorOff') };
     res.redirect('/settings');
+  });
+
+  // Remembered devices: forget one, or all of them. Only your own.
+  r.post('/settings/devices/forget-all', requireAuth, async (req, res) => {
+    await enforce(`devices:${req.user.id}`, 30, 900);
+    const count = await forgetAllDevices(req.user.id);
+    clearDeviceCookie(res, config);
+    if (count) await audit({ query: q }, { actorId: req.user.id, action: 'auth.devices_forgotten', subjectUserId: req.user.id, details: { count }, ip: req.ip });
+    req.session.flash = { type: 'ok', text: req.t('settings.devicesForgotten') };
+    res.redirect('/settings#devices');
+  });
+
+  r.post('/settings/devices/:id/forget', requireAuth, async (req, res) => {
+    await enforce(`devices:${req.user.id}`, 30, 900);
+    if (!UUID.test(req.params.id)) throw new HttpError(404, 'not found');
+    const device = await forgetDevice(req.user.id, req.params.id);
+    if (!device) throw new HttpError(404, 'not found');
+    const mine = deviceTokenFrom(req, config);
+    if (mine && !(await one('SELECT 1 FROM trusted_devices WHERE token_hash = $1 AND forgotten_at IS NULL', [hashToken(mine)]))) {
+      clearDeviceCookie(res, config);
+    }
+    await audit({ query: q }, {
+      actorId: req.user.id, action: 'auth.device_forgotten', subjectUserId: req.user.id, details: { device: device.id, label: device.label }, ip: req.ip,
+    });
+    req.session.flash = { type: 'ok', text: req.t('settings.deviceForgotten') };
+    res.redirect('/settings#devices');
   });
 
   return r;
