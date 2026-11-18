@@ -51,6 +51,7 @@ jobs:
           PORT: "3000"
           APP_URL: http://localhost:3000
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/mahamm_demo
+          OAUTH_REDIRECT_URIS: https://app.example.test/callback
         run: |
           export SESSION_SECRET="$(openssl rand -hex 32)" DATA_ENCRYPTION_KEY="$(openssl rand -hex 32)" DEMO_PASSWORD="$(openssl rand -hex 16)"
           PGPASSWORD=postgres psql -h localhost -U postgres -c 'CREATE DATABASE mahamm_demo'

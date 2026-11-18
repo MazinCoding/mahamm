@@ -86,4 +86,33 @@
   {% endif %}
 </section>
 {% endif %}
+
+{% if appsEnabled or apps.length %}
+<section class="card-form" id="apps">
+  <h2 class="section-title">{{ t('settings.apps') }}</h2>
+  <p class="hint">{{ t('settings.appsHint', { appName: appName }) }}</p>
+  {% if apps.length %}
+  <ul class="device-list">
+    {% for a in apps %}
+    <li class="device">
+      <div class="device-info">
+        <span class="strong"><bdi>{{ a.name }}</bdi></span>
+        <span class="muted small">{{ t('settings.appUsed', { d: fmt.date(a.last_used_at) }) }} · {{ t('settings.appSince', { d: fmt.date(a.created_at) }) }}</span>
+      </div>
+      <form method="post" action="/settings/apps/{{ a.id }}/disconnect">
+        <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+        <button class="btn btn-secondary btn-sm" type="submit">{{ t('settings.disconnect') }}</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  <form class="form-actions" method="post" action="/settings/apps/disconnect-all" data-confirm="{{ t('settings.confirmDisconnectAll') }}">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <button class="btn btn-secondary" type="submit">{{ t('settings.disconnectAll') }}</button>
+  </form>
+  {% else %}
+  <p class="muted">{{ t('settings.noApps') }}</p>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

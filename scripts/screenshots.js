@@ -4,6 +4,7 @@
 // sideways scrolling and drag-and-drop behaviour.
 // Usage: node scripts/screenshots.js <output-folder>
 import { spawn } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import ExcelJS from 'exceljs';
@@ -413,6 +414,62 @@ await step('remembered-device', async () => {
   await shot(page, '17c-settings-devices-ar');
   await page.click('.topbar form[action="/lang"] button');
   await page.waitForLoadState('networkidle');
+});
+
+// Connected apps: an outside app asks to connect, the person approves, and
+// the connection shows in Settings where it can be ended.
+await step('connected-apps', async () => {
+  const back = process.env.OAUTH_REDIRECT_URIS?.split(',')[0];
+  if (!back) {
+    note('check: connected apps skipped (OAUTH_REDIRECT_URIS not set)');
+    return;
+  }
+  const reg = await (await fetch(`${base}/oauth/register`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client_name: 'Example app', redirect_uris: [back] }),
+  })).json();
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  const authorize = `${base}/oauth/authorize?${new URLSearchParams({
+    response_type: 'code', client_id: reg.client_id, redirect_uri: back, code_challenge: challenge, code_challenge_method: 'S256', state: 'walk', scope: 'tasks offline_access',
+  })}`;
+  // The app's address isn't real here: catch the approval's redirect instead
+  // of following it, and keep the address it would have gone to.
+  let returned = null;
+  await page.route(`${base}/oauth/authorize`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const res = await route.fetch({ maxRedirects: 0 });
+    returned = res.headers().location || null;
+    return route.fulfill({ status: 200, contentType: 'text/plain', body: 'back at the app' });
+  });
+  await page.goto(authorize);
+  note(`check: consent page title = ${(await page.locator('h1').innerText()).trim()}; return host shown = ${(await page.locator('.consent-host').innerText()).trim()}`);
+  await shot(page, '31-connect-app');
+  await phone.addCookies(await desktop.cookies());
+  await mobile.goto(authorize);
+  const buttons = await mobile.locator('.consent-actions').boundingBox();
+  note(`check: phone consent buttons visible = ${!!buttons && buttons.y + buttons.height <= 844}`);
+  await shot(mobile, '31b-phone-connect-app');
+  await page.click('.auth-top form[action="/lang"] button');
+  await page.waitForLoadState('networkidle');
+  note(`check: Arabic consent dir = ${await page.getAttribute('html', 'dir')}`);
+  await shot(page, '31c-connect-app-ar');
+  await page.click('.auth-top form[action="/lang"] button');
+  await page.waitForLoadState('networkidle');
+  await Promise.all([page.waitForLoadState('load'), page.click('button[name=decision][value=allow]')]);
+  await page.unroute(`${base}/oauth/authorize`);
+  note(`check: approval returns to ${returned ? new URL(returned).origin + new URL(returned).pathname : 'nowhere'}`);
+  const code = returned ? new URL(returned).searchParams.get('code') : null;
+  const tokens = await (await fetch(`${base}/oauth/token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'authorization_code', client_id: reg.client_id, code, redirect_uri: back, code_verifier: verifier }),
+  })).json();
+  note(`check: app received a code = ${!!code}; tokens issued = ${!!tokens.access_token && !!tokens.refresh_token}`);
+  await page.goto(`${base}/settings#apps`);
+  note(`check: connected apps listed = ${await page.locator('#apps .device').count()}`);
+  await shot(page, '32-settings-apps');
+  await Promise.all([page.waitForURL('**/settings#apps'), page.click('#apps .device form button')]);
+  note(`check: after disconnect = ${(await page.locator('.flash').innerText()).trim()}; listed = ${await page.locator('#apps .device').count()}`);
 });
 
 const anon = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true });

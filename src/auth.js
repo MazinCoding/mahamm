@@ -3,6 +3,7 @@ import connectPgSimple from 'connect-pg-simple';
 import { csrfSync } from 'csrf-sync';
 import { getPool, q } from './db.js';
 import { forgetAllDevices, rememberMs } from './devices.js';
+import { revokeAllGrants } from './oauth.js';
 
 const ABSOLUTE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000; // sign in again at least weekly
 const IDLE_TIMEOUT_MS = 12 * 60 * 60 * 1000; // or after 12 hours without activity
@@ -91,10 +92,12 @@ export async function startPendingSession(req, user) {
 }
 
 // Used on a password change or reset and when an account is disabled: every
-// other session ends and every remembered device has to give a code again.
+// other session ends, every remembered device has to give a code again, and
+// every connected app has to be approved again.
 export async function signOutEverywhere(userId, exceptSid = null) {
   await q(`DELETE FROM "session" WHERE sess->>'userId' = $1 AND sid IS DISTINCT FROM $2`, [userId, exceptSid]);
   await forgetAllDevices(userId);
+  await revokeAllGrants(userId);
 }
 
 export function loadUser() {

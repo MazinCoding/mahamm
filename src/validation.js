@@ -137,6 +137,43 @@ export const profileSchema = z.object({
   email_notifications: z.preprocess((v) => v === 'on' || v === 'true', z.boolean()),
 });
 
+// Connected apps (OAuth). These values come from outside apps, so every field is bounded.
+const oneOf = (allowed) => z.array(z.string().max(50)).max(5).refine((v) => v.every((x) => allowed.includes(x)), 'not supported');
+export const registerClientSchema = z.object({
+  client_name: z.preprocess((v) => cleanLine(v ?? 'App').slice(0, 100) || 'App', z.string().min(1).max(100)),
+  redirect_uris: z.array(z.string().max(500)).min(1).max(5),
+  token_endpoint_auth_method: z.literal('none').optional(),
+  grant_types: oneOf(['authorization_code', 'refresh_token']).optional(),
+  response_types: oneOf(['code']).optional(),
+});
+
+export const authorizeSchema = z.object({
+  response_type: z.literal('code'),
+  client_id: z.string().max(64),
+  redirect_uri: z.string().max(500),
+  code_challenge: z.string().regex(/^[A-Za-z0-9_-]{43,128}$/),
+  code_challenge_method: z.literal('S256'),
+  state: z.string().max(1000).optional(),
+  scope: z.string().max(200).optional(),
+  resource: z.string().max(500).optional(),
+});
+
+export const tokenSchema = z.discriminatedUnion('grant_type', [
+  z.object({
+    grant_type: z.literal('authorization_code'),
+    client_id: z.string().max(64),
+    code: z.string().max(100),
+    redirect_uri: z.string().max(500),
+    code_verifier: z.string().max(128),
+  }),
+  z.object({
+    grant_type: z.literal('refresh_token'),
+    client_id: z.string().max(64),
+    refresh_token: z.string().max(100),
+    scope: z.string().max(200).optional(),
+  }),
+]);
+
 export const idParam = (value) => (/^\d{1,9}$/.test(String(value)) ? Number(value) : null);
 export const uuidParam = (value) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value)) ? String(value) : null);
 

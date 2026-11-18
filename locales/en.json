@@ -382,7 +382,10 @@
     "signedInRemembered": "signed in on a remembered device",
     "deviceRemembered": "remembered a device ({device})",
     "deviceForgotten": "forgot a device ({device})",
-    "devicesForgotten": "forgot all remembered devices ({count})"
+    "devicesForgotten": "forgot all remembered devices ({count})",
+    "appConnected": "connected an app ({app})",
+    "appDisconnected": "disconnected an app ({app})",
+    "appsDisconnected": "disconnected all apps ({count})"
   },
   "act": {
     "task": {
@@ -411,7 +414,10 @@
       "password_reset": "Password reset",
       "two_factor_enabled": "Two-step on",
       "two_factor_disabled": "Two-step off",
-      "recovery_code_used": "Recovery code used"
+      "recovery_code_used": "Recovery code used",
+      "app_connected": "App connected",
+      "app_disconnected": "App disconnected",
+      "apps_disconnected": "Apps disconnected"
     },
     "user": {
       "invited": "Invite sent",
@@ -601,7 +607,17 @@
     "confirmForgetAll": "Forget every remembered device? Each one will ask for a code at the next sign-in.",
     "noDevices": "No remembered devices. Tick “Remember this device” when you enter a code to add one.",
     "deviceForgotten": "Device forgotten. It will ask for a code next time.",
-    "devicesForgotten": "All devices forgotten. Each will ask for a code next time."
+    "devicesForgotten": "All devices forgotten. Each will ask for a code next time.",
+    "apps": "Connected apps",
+    "appsHint": "Apps you've allowed to use {appName} as you. They stop working if you disconnect them, change or reset your password, or your account is disabled.",
+    "appUsed": "Last used {d}",
+    "appSince": "connected {d}",
+    "disconnect": "Disconnect",
+    "disconnectAll": "Disconnect all apps",
+    "confirmDisconnectAll": "Disconnect every app? Each one will need to be approved again.",
+    "noApps": "No connected apps.",
+    "appDisconnected": "App disconnected.",
+    "appsDisconnected": "All apps disconnected."
   },
   "twoFactor": {
     "title": "Set up two-step verification",
@@ -842,5 +858,19 @@
     "pickDate": "Pick a date first, or choose another due date option.",
     "invalid": "Those details couldn't be saved. Check them and try again.",
     "closed": "{n} is already closed, so its details can't be changed here."
+  },
+  "oauth": {
+    "title": "Connect an app",
+    "wants": "wants to use your {appName} account.",
+    "signedInAs": "Signed in as {name}",
+    "canTitle": "It will be able to:",
+    "canSee": "See tasks, labels and people",
+    "canChange": "Add and update tasks in your name",
+    "cannot": "It can't see your password or delete anything. Everything it does is recorded in the history under your name.",
+    "returnTo": "After you choose, you'll go back to",
+    "loopbackWarn": "This app runs on a computer, not a website. Only continue if you started this connection yourself just now.",
+    "allow": "Allow",
+    "deny": "Cancel",
+    "manage": "You can disconnect it at any time in Settings → Connected apps."
   }
 }

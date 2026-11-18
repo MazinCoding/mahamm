@@ -9,6 +9,7 @@ export const GROUPS = {
     'setup.completed', 'auth.signed_in', 'auth.signin_paused', 'auth.password_changed', 'auth.password_reset',
     'auth.two_factor_enabled', 'auth.two_factor_disabled', 'auth.recovery_code_used',
     'auth.device_remembered', 'auth.device_forgotten', 'auth.devices_forgotten',
+    'auth.app_connected', 'auth.app_disconnected', 'auth.apps_disconnected',
     'user.invited', 'invite.revoked', 'invite.accepted', 'user.role_changed', 'user.disabled', 'user.enabled',
     'person.added', 'person.renamed',
     'user.reset_link_created', 'label.created', 'label.updated', 'audit.exported', 'settings.wip_limit_changed',
@@ -88,6 +89,9 @@ export function describe(ev, t, { names = {}, labels = {} } = {}) {
     case 'auth.device_remembered': return t('ev.deviceRemembered', { device: clip(d.label) });
     case 'auth.device_forgotten': return t('ev.deviceForgotten', { device: clip(d.label) });
     case 'auth.devices_forgotten': return t('ev.devicesForgotten', { count: d.count ?? 0 });
+    case 'auth.app_connected': return t('ev.appConnected', { app: clip(d.app) });
+    case 'auth.app_disconnected': return t('ev.appDisconnected', { app: clip(d.app) });
+    case 'auth.apps_disconnected': return t('ev.appsDisconnected', { count: d.count ?? 0 });
     case 'user.invited':
       if (d.user_id) return t('ev.invitedPerson', { email: d.email || '', role: t(`role.${d.role}`), person: who(d.user_id) });
       return t('ev.invited', { email: d.email || '', role: t(`role.${d.role}`) });
