@@ -17,6 +17,7 @@ import taskRoutes from './routes/tasks.js';
 import adminRoutes from './routes/admin.js';
 import meRoutes from './routes/me.js';
 import homeRoutes from './routes/home.js';
+import { oauthApiRoutes, oauthConsentRoutes } from './routes/oauth.js';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -100,6 +101,8 @@ export function createApp(config, logger) {
 
   app.use(express.urlencoded({ extended: false, limit: '100kb', parameterLimit: 300 }));
   app.use(express.json({ limit: '16kb' }));
+  // Called by outside apps, not browsers: no session, no CSRF token.
+  app.use(oauthApiRoutes(config));
   app.use(sessionMiddleware(config));
   app.use(loadUser());
   app.use(rejectUnexpectedMultipart);
@@ -143,6 +146,7 @@ export function createApp(config, logger) {
   app.use(authRoutes(config));
   app.use(meRoutes(config));
   app.use(homeRoutes(config));
+  app.use(oauthConsentRoutes(config));
   app.use(taskRoutes(config));
   app.use(adminRoutes(config));
 

@@ -30,6 +30,12 @@ const schema = z.object({
   WIP_LIMIT: z.coerce.number().int().min(1).max(50).default(5),
   PASSWORD_BREACH_CHECK: z.enum(['true', 'false']).optional(),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+
+  // Connected apps: the exact addresses outside apps may send people back to
+  // after they approve a connection (comma-separated). Unset turns it off.
+  OAUTH_REDIRECT_URIS: z.string().max(2000).optional(),
+  // Also allow apps that run on the person's own computer (http://localhost:<any port>).
+  OAUTH_ALLOW_LOOPBACK: z.enum(['true', 'false']).default('false'),
 });
 
 export class ConfigError extends Error {}
@@ -62,6 +68,19 @@ export function loadConfig(env = process.env) {
     throw new ConfigError(`Invalid or missing environment variables:\n${missing.join('\n')}`);
   }
 
+  const redirectUris = (c.OAUTH_REDIRECT_URIS || '').split(',').map((v) => v.trim()).filter(Boolean);
+  const badRedirects = redirectUris.filter((u) => {
+    try {
+      const url = new URL(u);
+      return url.protocol !== 'https:' || url.hash || url.username || url.password || u.length > 500;
+    } catch {
+      return true;
+    }
+  });
+  if (badRedirects.length || redirectUris.length > 5) {
+    throw new ConfigError('Invalid or missing environment variables:\n  - OAUTH_REDIRECT_URIS: up to 5 https addresses, comma-separated');
+  }
+
   let trustProxy = c.TRUST_PROXY ?? (isProd ? '1' : 'loopback');
   if (/^\d+$/.test(trustProxy)) trustProxy = Number(trustProxy);
   if (trustProxy === 'true') trustProxy = true;
@@ -87,6 +106,13 @@ export function loadConfig(env = process.env) {
       : null,
     trustProxy,
     wipLimit: c.WIP_LIMIT,
+    oauth: Object.freeze({
+      enabled: redirectUris.length > 0,
+      redirectUris: Object.freeze(redirectUris),
+      allowLoopback: c.OAUTH_ALLOW_LOOPBACK === 'true',
+      issuer: origin,
+      resource: `${origin}/connector`,
+    }),
     breachCheck: c.PASSWORD_BREACH_CHECK ? c.PASSWORD_BREACH_CHECK === 'true' : isProd,
     logLevel: c.NODE_ENV === 'test' ? 'silent' : c.LOG_LEVEL,
   });

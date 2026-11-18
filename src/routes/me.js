@@ -4,6 +4,7 @@ import { requireAuth, signOutEverywhere, startSession } from '../auth.js';
 import { decryptField, encryptField, hashRecoveryCode, hashToken, newRecoveryCodes } from '../crypto.js';
 import { clearDeviceCookie, deviceTokenFrom, forgetAllDevices, forgetDevice, listDevices, rememberDays } from '../devices.js';
 import { one, q } from '../db.js';
+import { listGrants, revokeAllGrants, revokeGrant } from '../oauth.js';
 import { hashPassword, passwordProblem, verifyPassword, MAX_LENGTH } from '../passwords.js';
 import { enforce } from '../ratelimit.js';
 import { newTotpSecret, totpQrDataUrl, verifyTotp } from '../totp.js';
@@ -47,7 +48,10 @@ export default function meRoutes(config) {
     const mine = deviceTokenFrom(req, config);
     const mineHash = mine ? hashToken(mine) : null;
     const devices = (await listDevices(req.user.id)).map(({ token_hash: th, ...d }) => ({ ...d, current: th === mineHash }));
-    res.render('settings/index.njk', { me, devices, rememberDays: rememberDays(req.user.role), errors: {} });
+    const apps = await listGrants(req.user.id);
+    res.render('settings/index.njk', {
+      me, devices, apps, appsEnabled: config.oauth.enabled, rememberDays: rememberDays(req.user.role), errors: {},
+    });
   });
 
   r.post('/settings/profile', requireAuth, async (req, res) => {
@@ -164,6 +168,27 @@ export default function meRoutes(config) {
     });
     req.session.flash = { type: 'ok', text: req.t('settings.deviceForgotten') };
     res.redirect('/settings#devices');
+  });
+
+  // Connected apps: disconnect one, or all of them. Only your own.
+  r.post('/settings/apps/disconnect-all', requireAuth, async (req, res) => {
+    await enforce(`apps:${req.user.id}`, 30, 900);
+    const count = await revokeAllGrants(req.user.id);
+    if (count) await audit({ query: q }, { actorId: req.user.id, action: 'auth.apps_disconnected', subjectUserId: req.user.id, details: { count }, ip: req.ip });
+    req.session.flash = { type: 'ok', text: req.t('settings.appsDisconnected') };
+    res.redirect('/settings#apps');
+  });
+
+  r.post('/settings/apps/:id/disconnect', requireAuth, async (req, res) => {
+    await enforce(`apps:${req.user.id}`, 30, 900);
+    if (!UUID.test(req.params.id)) throw new HttpError(404, 'not found');
+    const grant = await revokeGrant(req.user.id, req.params.id);
+    if (!grant) throw new HttpError(404, 'not found');
+    await audit({ query: q }, {
+      actorId: req.user.id, action: 'auth.app_disconnected', subjectUserId: req.user.id, details: { grant: grant.id, app: grant.name }, ip: req.ip,
+    });
+    req.session.flash = { type: 'ok', text: req.t('settings.appDisconnected') };
+    res.redirect('/settings#apps');
   });
 
   return r;

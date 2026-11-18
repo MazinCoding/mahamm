@@ -1,0 +1,25 @@
+{% extends "bare.njk" %}
+{% block title %}{{ t('oauth.title') }}{% endblock %}
+{% block content %}
+<h1>{{ t('oauth.title') }}</h1>
+<p class="sub"><strong><bdi>{{ client.name }}</bdi></strong> {{ t('oauth.wants', { appName: appName }) }}</p>
+<p class="muted small">{{ t('oauth.signedInAs', { name: user.name }) }}</p>
+{% if loopback %}<div class="alert" role="alert">{{ t('oauth.loopbackWarn') }}</div>{% endif %}
+<p class="strong">{{ t('oauth.canTitle') }}</p>
+<ul class="consent-list">
+  <li>{{ t('oauth.canSee') }}</li>
+  <li>{{ t('oauth.canChange') }}</li>
+</ul>
+<p class="hint">{{ t('oauth.cannot') }}</p>
+<p>{{ t('oauth.returnTo') }} <strong dir="ltr" class="consent-host">{{ host }}</strong></p>
+<form class="form" method="post" action="/oauth/authorize">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  {% for name, value in fields %}<input type="hidden" name="{{ name }}" value="{{ value }}">
+  {% endfor %}
+  <div class="consent-actions">
+    <button class="btn btn-primary" type="submit" name="decision" value="allow">{{ t('oauth.allow') }}</button>
+    <button class="btn btn-secondary" type="submit" name="decision" value="deny">{{ t('oauth.deny') }}</button>
+  </div>
+</form>
+<p class="auth-foot">{{ t('oauth.manage') }}</p>
+{% endblock %}
