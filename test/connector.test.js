@@ -46,7 +46,7 @@ async function call(token, name, args) {
 const taskRow = async (id) => (await q('SELECT * FROM tasks WHERE id = $1', [id])).rows[0];
 const assigneeIds = async (id) => (await q('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
 const openFlags = async (id) => (await q('SELECT * FROM flags WHERE task_id = $1 AND resolved_at IS NULL', [id])).rows;
-const addPerson = async (name) => (await q(`INSERT INTO users (name, role, status) VALUES ($1, 'member', 'active') RETURNING id, name`, [name])).rows[0];
+const addPerson = async (name) => (await q(`INSERT INTO users (name, role, status, email_notifications) VALUES ($1, 'member', 'active', false) RETURNING id, name`, [name])).rows[0];
 
 describe('connector: protocol', () => {
   test('without a token it asks the app to sign in, pointing at the metadata', async () => {
