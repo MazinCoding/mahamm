@@ -492,6 +492,71 @@ await step('connected-apps', async () => {
   await page.waitForLoadState('networkidle');
   await Promise.all([page.waitForURL('**/home'), page.click('.preview-actions .btn-primary')]);
   note(`check: after confirming = ${(await page.locator('.flash').innerText()).trim()}`);
+
+  // Cards: what a connected app shows with the results, in a stand-in for the
+  // app that answers the card's messages and passes its tool calls on.
+  const rpc = async (method, params) => (await (await fetch(`${base}/connector`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.access_token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+  })).json()).result;
+  const card = (await rpc('resources/read', { uri: 'ui://mahamm/card.html' })).contents[0];
+  note(`check: card resource = ${card.mimeType}, ${card.text.length} characters`);
+  const enc = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+  const cardHost = (result) => `<!doctype html><html><body style="margin:0;background:#f5f4ed"><iframe id="f" style="border:0;width:100%;height:600px"></iframe><script>
+    const result = ${enc(result)};
+    const f = document.getElementById('f');
+    addEventListener('message', async (e) => {
+      if (e.source !== f.contentWindow) return;
+      const m = e.data;
+      const reply = (r) => f.contentWindow.postMessage({ jsonrpc: '2.0', id: m.id, result: r }, '*');
+      if (m.method === 'ui/initialize') reply({ protocolVersion: '2026-01-26', hostInfo: { name: 'stand-in', version: '1' }, hostCapabilities: {}, hostContext: { theme: 'light', displayMode: 'inline' } });
+      else if (m.method === 'ui/notifications/initialized') f.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: result }, '*');
+      else if (m.method === 'ui/notifications/size-changed') f.style.height = m.params.height + 'px';
+      else if (m.method === 'tools/call') reply(await window.callConnector(m.params.name, m.params.arguments));
+      else if (m.id !== undefined) reply({});
+    });
+    f.srcdoc = ${enc(card.text)};
+  </script></body></html>`;
+  await page.exposeFunction('callConnector', (name, args) => tool(name, args));
+  async function showCard(p, result, name) {
+    await p.setContent(cardHost(result));
+    const frame = p.frameLocator('#f');
+    await frame.locator('.task, .note, h2').first().waitFor({ timeout: 5000 });
+    await p.waitForTimeout(300);
+    await shot(p, name);
+    return frame;
+  }
+  const cardText = async (frame) => (await frame.locator('#root').innerText()).replace(/\s+/g, ' ').trim();
+
+  const added = await tool('create_tasks', { tasks: [{ title: 'Order printer paper', assign_to_me: true }] });
+  let frame = await showCard(page, added, '34-card-added');
+  await showCard(mobile, added, '34b-phone-card-added');
+  await frame.getByRole('button', { name: 'Undo' }).click();
+  await frame.getByRole('button', { name: 'Undone' }).waitFor({ timeout: 5000 });
+  const undone = await one('SELECT close_reason FROM tasks WHERE id = $1', [added.structuredContent.tasks[0].id]);
+  note(`check: card Undo closed the added task as ${undone.close_reason}`);
+
+  const another = await tool('create_tasks', { tasks: [{ title: 'Call the printer supplier', assign_to_me: true }] });
+  const detail = await tool('get_task', { task_id: another.structuredContent.tasks[0].id });
+  frame = await showCard(page, detail, '34c-card-task');
+  await frame.getByRole('button', { name: 'In progress' }).click();
+  await frame.locator('button[aria-pressed="true"]', { hasText: 'In progress' }).waitFor({ timeout: 5000 });
+  note(`check: card status step saved = ${(await one('SELECT status FROM tasks WHERE id = $1', [detail.structuredContent.id])).status}`);
+
+  const day = await tool('my_work', {});
+  await showCard(page, day, '34d-card-my-day');
+  const dayAr = { ...day, _meta: { ...day._meta, 'mahamm/card': { ...day._meta['mahamm/card'], lang: 'ar' } } };
+  frame = await showCard(mobile, dayAr, '34e-phone-card-my-day-ar');
+  note(`check: Arabic card dir = ${await frame.locator('html').getAttribute('dir')}`);
+
+  const big = await tool('update_tasks', { task_ids: six.map((r) => r.id), priority: 'high' });
+  frame = await showCard(page, big, '34f-card-confirm');
+  await showCard(mobile, big, '34g-phone-card-confirm');
+  await frame.getByRole('button', { name: 'Confirm' }).click();
+  await frame.locator('h2', { hasText: 'Confirmed' }).waitFor({ timeout: 5000 });
+  await shot(page, '34h-card-confirmed');
+  note(`check: card Confirm changed the tasks = ${(await one('SELECT priority FROM tasks WHERE id = $1', [six[0].id])).priority}; card says "${(await cardText(frame)).slice(0, 60)}"`);
   await page.goto(`${base}/settings#apps`);
   note(`check: connected apps listed = ${await page.locator('#apps .device').count()}`);
   await shot(page, '32-settings-apps');

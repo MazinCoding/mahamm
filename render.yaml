@@ -43,6 +43,8 @@ services:
       # Connected apps are off until return addresses are set here.
       - key: OAUTH_REDIRECT_URIS
         sync: false
+      - key: CONNECTOR_UI_DOMAIN
+        sync: false
 
 databases:
   - name: mahamm-db
