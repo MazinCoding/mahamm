@@ -56,6 +56,12 @@
       {% endfor %}
     </div>
   </fieldset>
+  {% if mode == 'edit' %}
+  <div class="field">
+    <label class="check-inline"><input type="checkbox" name="team_task" value="on" {% if values.team_task %}checked{% endif %}> {{ t('task.teamTask') }}</label>
+    <p class="hint">{{ t('task.teamTaskHint') }}</p>
+  </div>
+  {% endif %}
   {% if mode == 'new' %}
   <div class="field">
     <label for="file">{{ t('field.attachment') }} <span class="muted">({{ t('common.optional') }})</span></label>

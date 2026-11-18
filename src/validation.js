@@ -33,7 +33,10 @@ const taskFields = {
 };
 
 export const newTaskSchema = z.object({ ...taskFields, status: z.enum(['backlog', 'todo']) });
-export const editTaskSchema = z.object(taskFields);
+export const editTaskSchema = z.object({
+  ...taskFields,
+  team_task: z.preprocess((v) => v === 'on' || v === true, z.boolean()),
+});
 
 export const moveSchema = z.object({ status: z.enum(['backlog', 'todo', 'progress', 'review']) });
 
@@ -173,6 +176,32 @@ export const tokenSchema = z.discriminatedUnion('grant_type', [
     scope: z.string().max(200).optional(),
   }),
 ]);
+
+// Connector tools. Values come from an outside app acting for a signed-in person.
+const connectorName = z.preprocess(cleanLine, z.string().min(1).max(100));
+const connectorDate = z.union([isoDate, z.null()]);
+const connectorPriority = z.enum(['high', 'medium', 'low']);
+export const captureSchema = z.object({
+  source: z.enum(['voice', 'text']).default('text'),
+  tasks: z.array(z.object({
+    title: z.preprocess(cleanLine, z.string().min(1).max(200)),
+    assignees: z.array(connectorName).max(10).default([]),
+    assign_to_me: z.boolean().default(false),
+    started: z.boolean().default(false),
+    team_task: z.boolean().default(false),
+    priority: connectorPriority.default('medium'),
+    due_date: connectorDate.optional(),
+  })).min(1).max(10),
+});
+export const connectorUpdateSchema = z.object({
+  task_id: z.number().int().min(1).max(999999999),
+  add_assignees: z.array(connectorName).max(10).default([]),
+  status: z.enum(['backlog', 'todo', 'in_progress', 'review']).transform((v) => (v === 'in_progress' ? 'progress' : v)).optional(),
+  priority: connectorPriority.optional(),
+  due_date: connectorDate.optional(),
+  team_task: z.boolean().optional(),
+});
+export const connectorUndoSchema = z.object({ batch: z.string().uuid() });
 
 export const idParam = (value) => (/^\d{1,9}$/.test(String(value)) ? Number(value) : null);
 export const uuidParam = (value) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value)) ? String(value) : null);

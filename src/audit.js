@@ -73,6 +73,7 @@ export function describe(ev, t, { names = {}, labels = {} } = {}) {
         if (field === 'due_date') return t('ev.fieldChange', { field: t('field.due'), from: c.from || t('common.none'), to: c.to || t('common.none') });
         if (field === 'title') return t('ev.fieldChange', { field: t('field.title'), from: clip(c.from, 60), to: clip(c.to, 60) });
         if (field === 'description') return t('ev.fieldDescription');
+        if (field === 'team_task') return c.to ? t('ev.teamTaskOn') : t('ev.teamTaskOff');
         return field;
       });
       return `${t('ev.edited')}: ${parts.join('; ')}${undo}`;

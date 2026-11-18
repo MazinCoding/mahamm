@@ -118,6 +118,7 @@
     <section class="side">
       <h2>{{ t('field.assignees') }}</h2>
       {% for a in task.assignees %}<div class="person">{{ m.avatar(a) }}<span>{{ a.name }}</span></div>{% else %}<p class="muted"><em>{{ t('task.noOne') }}</em></p>{% endfor %}
+      {% if task.team_task %}<p><span class="chip c-blue">{{ t('task.teamTask') }}</span></p>{% endif %}
     </section>
     <section class="side">
       <h2>{{ t('field.labels') }}</h2>
