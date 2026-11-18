@@ -120,8 +120,13 @@ async function revokeGrantIn(db, grantId) {
   await db.query('UPDATE oauth_tokens SET revoked_at = now() WHERE grant_id = $1 AND revoked_at IS NULL', [grantId]);
 }
 
+// A replayed code or refresh token ends the connection. That must be saved
+// even though the request fails, so the transaction returns a marker and the
+// error is thrown after it commits.
+const REPLAYED = Symbol('replayed');
+
 export async function exchangeCode({ clientId, code, redirectUri, codeVerifier, ip }) {
-  return tx(async (db) => {
+  const result = await tx(async (db) => {
     const { rows } = await db.query(
       `SELECT c.*, u.role, u.status, u.email FROM oauth_codes c JOIN users u ON u.id = c.user_id
        WHERE c.code_hash = $1 FOR UPDATE OF c`,
@@ -132,7 +137,7 @@ export async function exchangeCode({ clientId, code, redirectUri, codeVerifier, 
     if (row.used_at) {
       // A code used twice may have been stolen: end the connection it made.
       if (row.grant_id) await revokeGrantIn(db, row.grant_id);
-      throw new OAuthError('invalid_grant', 'code already used');
+      return REPLAYED;
     }
     if (new Date(row.expires_at) <= new Date()) throw new OAuthError('invalid_grant', 'code expired');
     if (row.redirect_uri !== redirectUri) throw new OAuthError('invalid_grant', 'redirect_uri mismatch');
@@ -150,10 +155,12 @@ export async function exchangeCode({ clientId, code, redirectUri, codeVerifier, 
     const tokens = await issueTokens(db, grant.id, row.role, row.scope.split(' ').includes('offline_access'));
     return { ...tokens, scope: row.scope };
   });
+  if (result === REPLAYED) throw new OAuthError('invalid_grant', 'code already used');
+  return result;
 }
 
 export async function refreshTokens({ clientId, refreshToken }) {
-  return tx(async (db) => {
+  const result = await tx(async (db) => {
     const { rows } = await db.query(
       `SELECT t.token_hash, t.expires_at, t.revoked_at, g.id AS grant_id, g.client_id, g.scope, g.revoked_at AS grant_revoked, u.role,
               (${ACCOUNT_OK}) AS account_ok
@@ -167,7 +174,7 @@ export async function refreshTokens({ clientId, refreshToken }) {
       // An old refresh token came back after it was replaced: it may have
       // been copied, so the whole connection ends.
       if (!row.grant_revoked) await revokeGrantIn(db, row.grant_id);
-      throw new OAuthError('invalid_grant', 'refresh token not valid');
+      return REPLAYED;
     }
     if (row.grant_revoked || !row.account_ok || new Date(row.expires_at) <= new Date()) {
       throw new OAuthError('invalid_grant', 'refresh token not valid');
@@ -177,6 +184,8 @@ export async function refreshTokens({ clientId, refreshToken }) {
     const tokens = await issueTokens(db, row.grant_id, row.role, true);
     return { ...tokens, scope: row.scope };
   });
+  if (result === REPLAYED) throw new OAuthError('invalid_grant', 'refresh token not valid');
+  return result;
 }
 
 // The person an access token acts for, or null. Checked on every call, so a
