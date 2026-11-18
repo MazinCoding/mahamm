@@ -510,9 +510,10 @@ await step('connected-apps', async () => {
       if (e.source !== f.contentWindow) return;
       const m = e.data;
       const reply = (r) => f.contentWindow.postMessage({ jsonrpc: '2.0', id: m.id, result: r }, '*');
-      if (m.method === 'ui/initialize') reply({ protocolVersion: '2026-01-26', hostInfo: { name: 'stand-in', version: '1' }, hostCapabilities: {}, hostContext: { theme: 'light', displayMode: 'inline' } });
+      if (m.method === 'ui/initialize') reply({ protocolVersion: '2026-01-26', hostInfo: { name: 'stand-in', version: '1' }, hostCapabilities: {}, hostContext: { theme: 'light', displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] } });
+      else if (m.method === 'ui/request-display-mode') { window.full = m.params.mode === 'fullscreen'; if (window.full) f.style.height = innerHeight + 'px'; reply({ mode: m.params.mode }); }
       else if (m.method === 'ui/notifications/initialized') f.contentWindow.postMessage({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: result }, '*');
-      else if (m.method === 'ui/notifications/size-changed') f.style.height = m.params.height + 'px';
+      else if (m.method === 'ui/notifications/size-changed') { if (!window.full) f.style.height = m.params.height + 'px'; }
       else if (m.method === 'tools/call') reply(await window.callConnector(m.params.name, m.params.arguments));
       else if (m.id !== undefined) reply({});
     });
@@ -573,6 +574,33 @@ await step('connected-apps', async () => {
     note(`check: card Take it = status ${taken.status}, assigned to me ${taken.mine}`);
     await shot(page, '34k-card-taken');
   }
+
+  // The board: a summary card that opens full screen, where tasks move by dragging or tapping.
+  const board = await tool('open_board', {});
+  note(`check: board text has counts only = ${!JSON.stringify(board.content).includes('"tasks"')}; card has ${board._meta['mahamm/board'].tasks.length} tasks`);
+  frame = await showCard(page, board, '35-card-board');
+  await frame.getByRole('button', { name: 'Open full screen' }).click();
+  await frame.locator('.columns').waitFor({ timeout: 5000 });
+  await page.waitForTimeout(300);
+  await shot(page, '35b-board-full-screen');
+  const todoTask = await frame.locator('.column[data-status="todo"] .chip-task').first();
+  const dragged = Number((await todoTask.locator('.task-id').innerText()).replace('#', ''));
+  await todoTask.dragTo(frame.locator('.column[data-status="in_progress"]'));
+  await frame.locator(`.column[data-status="in_progress"] .task-id`, { hasText: `#${dragged}` }).first().waitFor({ timeout: 5000 });
+  note(`check: board drag #${dragged} to In progress saved = ${(await one('SELECT status FROM tasks WHERE id = $1', [dragged])).status}`);
+  await mobile.exposeFunction('callConnector', (name, args) => tool(name, args));
+  const phoneFrame = await showCard(mobile, board, '35c-phone-card-board');
+  await phoneFrame.getByRole('button', { name: 'Open full screen' }).click();
+  await phoneFrame.locator('.columns').waitFor({ timeout: 5000 });
+  await mobile.waitForTimeout(300);
+  await shot(mobile, '35d-phone-board-full-screen');
+  const tapTask = phoneFrame.locator('.column[data-status="backlog"] .chip-task, .column[data-status="todo"] .chip-task').first();
+  const tapped = Number((await tapTask.locator('.task-id').innerText()).replace('#', ''));
+  await tapTask.click();
+  await phoneFrame.locator('.chip-task[aria-expanded="true"] .steps button', { hasText: 'Review' }).click();
+  await phoneFrame.locator('.column[data-status="review"] .task-id', { hasText: `#${tapped}` }).first().waitFor({ timeout: 5000 });
+  note(`check: phone board tap #${tapped} to Review saved = ${(await one('SELECT status FROM tasks WHERE id = $1', [tapped])).status}`);
+  await shot(mobile, '35e-phone-board-moved');
   await page.goto(`${base}/settings#apps`);
   note(`check: connected apps listed = ${await page.locator('#apps .device').count()}`);
   await shot(page, '32-settings-apps');

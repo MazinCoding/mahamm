@@ -993,6 +993,17 @@
     "whyDueSoon": "Due {date}",
     "unknownDescription": "No description yet",
     "noSuggestions": "Nothing open that you aren’t already on.",
-    "noSkills": "No skills saved yet: say them in the chat, or add them in Settings."
+    "noSkills": "No skills saved yet: say them in the chat, or add them in Settings.",
+    "board": "Board",
+    "tabAll": "Everything",
+    "tabMine": "Mine",
+    "tabReview": "To review",
+    "fullScreen": "Open full screen",
+    "refresh": "Refresh",
+    "emptyColumn": "Nothing here",
+    "openBoard": "Open in {appName}",
+    "yours": "Yours: {count}",
+    "waitingForYou": "Waiting for your review: {count}",
+    "shownOf": "Showing the {shown} most urgent of {total} open tasks"
   }
 }

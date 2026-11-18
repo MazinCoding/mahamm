@@ -779,3 +779,32 @@ export async function takeTask(id, actor, ip, { origin, wipLimit }) {
   if (count > limit) result.warning = `In progress now has ${count} tasks, over the team's limit of ${limit}.`;
   return result;
 }
+
+// ---------- the board ----------
+
+const BOARD_LIMIT = 400;
+
+// Open tasks for the full-screen board (most urgent first), and which are the
+// person's own or waiting for their review.
+export async function boardSnapshot(actor, { timezone, origin, wipLimit }) {
+  const { rows } = await q(
+    `SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE t.closed_at IS NULL
+     ORDER BY CASE t.priority WHEN 'high' THEN 0 WHEN 'med' THEN 1 ELSE 2 END, t.due_date ASC NULLS LAST, t.id DESC
+     LIMIT ${BOARD_LIMIT}`,
+  );
+  const on = (r) => r.assignees.some((a) => a.id === actor.id);
+  const counts = Object.fromEntries((await q(
+    `SELECT status, count(*)::int AS n FROM tasks WHERE closed_at IS NULL GROUP BY status`,
+  )).rows.map((r) => [STATUS_OUT[r.status], r.n]));
+  return {
+    you: actor.name,
+    today: localToday(timezone),
+    in_progress_limit: await getWipLimit(wipLimit),
+    counts: { backlog: counts.backlog || 0, todo: counts.todo || 0, in_progress: counts.in_progress || 0, review: counts.review || 0 },
+    shown: rows.length,
+    tasks: rows.map((r) => taskRow(r, actor.lang, origin)),
+    mine: rows.filter(on).map((r) => r.id),
+    review: rows.filter((r) => r.status === 'review'
+      && (r.reviewer_id === actor.id || (!r.reviewer_id && r.creator_id === actor.id && !on(r)))).map((r) => r.id),
+  };
+}

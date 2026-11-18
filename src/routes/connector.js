@@ -3,8 +3,8 @@ import { SCOPES, verifyAccessToken } from '../oauth.js';
 import { enforce } from '../ratelimit.js';
 import { updateCaptured } from '../services/capture.js';
 import {
-  MAX_ADD, MAX_DIRECT, activity, addTasks, closeTasks, comment, flag, joinOne, markRead, myWork, searchTasks, setSkills, suggest,
-  takeTask, taskInFull, teamOverview, undoAny, updateTasks, workload,
+  MAX_ADD, MAX_DIRECT, activity, addTasks, boardSnapshot, closeTasks, comment, flag, joinOne, markRead, myWork, searchTasks, setSkills,
+  suggest, takeTask, taskInFull, teamOverview, undoAny, updateTasks, workload,
 } from '../services/connector.js';
 import { PREVIEW_MINUTES, adminPreview, cancelPreview, confirmPreview } from '../services/previews.js';
 import { HttpError } from '../services/tasks.js';
@@ -281,6 +281,13 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
+    name: 'open_board',
+    title: 'Board',
+    description: 'Show the team\'s board on a card the person can open full screen, with tabs for everything, their own tasks and tasks waiting for their review; they can move tasks between columns there. Returns only counts per column; the tasks themselves go to the card. Use it when someone asks to see or open the board.',
+    inputSchema: object({}),
+    annotations: READ,
+  },
+  {
     name: 'suggest_tasks',
     title: 'What can I do now?',
     description: 'Open tasks the person is not on yet, ranked by how well they fit them: priority, their saved skills (matched in titles, descriptions and labels), labels of work they finished in the last 90 days, team tasks they could join, due dates and how long tasks have waited. Each candidate comes with "why" (the reasons) and "unknown" (missing details such as no due date). Also returns their skills (skills_saved is false when there are none), their recent labels and how much they have in progress against the team\'s limit. The card shows the first three.',
@@ -324,6 +331,14 @@ const TOOLS = [
     _meta: { ui: { visibility: ['app'] } },
   },
   {
+    name: 'board_snapshot',
+    title: 'Board data',
+    description: 'The open tasks for the full-screen board.',
+    inputSchema: object({}),
+    annotations: READ,
+    _meta: { ui: { visibility: ['app'] } },
+  },
+  {
     name: 'cancel_preview',
     title: 'Cancel',
     description: 'Drops a change after the person pressed Cancel on its card.',
@@ -334,7 +349,9 @@ const TOOLS = [
 ];
 
 // Tools whose results come with Mahamm's card, for apps that show cards.
-const CARD_TOOLS = new Set(['create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'my_work', 'get_task', 'admin_change', 'suggest_tasks', 'take_task']);
+const CARD_TOOLS = new Set([
+  'create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'my_work', 'get_task', 'admin_change', 'suggest_tasks', 'take_task', 'open_board',
+]);
 for (const tool of TOOLS) {
   if (CARD_TOOLS.has(tool.name)) tool._meta = { ...tool._meta, ui: { ...tool._meta?.ui, resourceUri: CARD_URI } };
 }
@@ -440,6 +457,20 @@ async function runTool(config, name, args, ctx) {
     case 'flag_task': return run(connectorFlagSchema, (d) => flag(d, user, ip));
     case 'mark_read': return run(connectorReadSchema, (d) => markRead(d, user));
     case 'suggest_tasks': return run(connectorSuggestSchema, (d) => suggest(d, user, opts));
+    case 'open_board': {
+      // The tasks go to the card in _meta; the text gets only the counts.
+      const board = await boardSnapshot(user, opts);
+      const result = ok({
+        ...board.counts,
+        in_progress_limit: board.in_progress_limit,
+        yours: board.mine.length,
+        waiting_for_your_review: board.review.length,
+        message: 'The board is on the card; the person can open it full screen and move tasks there.',
+      });
+      result._meta = { 'mahamm/board': board };
+      return result;
+    }
+    case 'board_snapshot': return ok(await boardSnapshot(user, opts));
     case 'take_task': return run(connectorTaskSchema, (d) => takeTask(d.task_id, user, ip, opts));
     case 'set_my_skills': return run(connectorSkillsSchema, (d) => setSkills(d, user));
     case 'admin_change': return run(connectorAdminSchema, (d) => adminPreview(d, user, opts));

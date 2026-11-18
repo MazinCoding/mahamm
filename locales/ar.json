@@ -993,6 +993,17 @@
     "whyDueSoon": "مستحقة في {date}",
     "unknownDescription": "بلا وصف بعد",
     "noSuggestions": "لا توجد مهام مفتوحة لست منضمًا إليها.",
-    "noSkills": "لم تحفظ مهاراتك بعد: اذكرها في المحادثة، أو أضفها في الإعدادات."
+    "noSkills": "لم تحفظ مهاراتك بعد: اذكرها في المحادثة، أو أضفها في الإعدادات.",
+    "board": "اللوحة",
+    "tabAll": "الكل",
+    "tabMine": "مهامي",
+    "tabReview": "للمراجعة",
+    "fullScreen": "فتح بملء الشاشة",
+    "refresh": "تحديث",
+    "emptyColumn": "لا شيء هنا",
+    "openBoard": "فتح في {appName}",
+    "yours": "مهامك: {count}",
+    "waitingForYou": "بانتظار مراجعتك: {count}",
+    "shownOf": "تظهر {shown} الأكثر إلحاحًا من أصل {total} مهمة مفتوحة"
   }
 }
