@@ -432,7 +432,15 @@ await step('connected-apps', async () => {
   const authorize = `${base}/oauth/authorize?${new URLSearchParams({
     response_type: 'code', client_id: reg.client_id, redirect_uri: back, code_challenge: challenge, code_challenge_method: 'S256', state: 'walk', scope: 'tasks offline_access',
   })}`;
-  await page.route(`${new URL(back).origin}/**`, (route) => route.fulfill({ status: 200, contentType: 'text/plain', body: 'back at the app' }));
+  // The app's address isn't real here: catch the approval's redirect instead
+  // of following it, and keep the address it would have gone to.
+  let returned = null;
+  await page.route(`${base}/oauth/authorize`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const res = await route.fetch({ maxRedirects: 0 });
+    returned = res.headers().location || null;
+    return route.fulfill({ status: 200, contentType: 'text/plain', body: 'back at the app' });
+  });
   await page.goto(authorize);
   note(`check: consent page title = ${(await page.locator('h1').innerText()).trim()}; return host shown = ${(await page.locator('.consent-host').innerText()).trim()}`);
   await shot(page, '31-connect-app');
@@ -447,8 +455,10 @@ await step('connected-apps', async () => {
   await shot(page, '31c-connect-app-ar');
   await page.click('.auth-top form[action="/lang"] button');
   await page.waitForLoadState('networkidle');
-  await Promise.all([page.waitForURL(`${back}**`), page.click('button[name=decision][value=allow]')]);
-  const code = new URL(page.url()).searchParams.get('code');
+  await Promise.all([page.waitForLoadState('load'), page.click('button[name=decision][value=allow]')]);
+  await page.unroute(`${base}/oauth/authorize`);
+  note(`check: approval returns to ${returned ? new URL(returned).origin + new URL(returned).pathname : 'nowhere'}`);
+  const code = returned ? new URL(returned).searchParams.get('code') : null;
   const tokens = await (await fetch(`${base}/oauth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
