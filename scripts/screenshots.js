@@ -520,6 +520,8 @@ await step('connected-apps', async () => {
   </script></body></html>`;
   await page.exposeFunction('callConnector', (name, args) => tool(name, args));
   async function showCard(p, result, name) {
+    // A blank page first, so the stand-in doesn't run under Mahamm's own content policy.
+    await p.goto('about:blank');
     await p.setContent(cardHost(result));
     const frame = p.frameLocator('#f');
     await frame.locator('.task, .note, h2').first().waitFor({ timeout: 5000 });
