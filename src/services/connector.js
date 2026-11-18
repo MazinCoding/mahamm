@@ -10,7 +10,7 @@ import { createPreview } from './previews.js';
 import { getWipLimit, inProgressCount } from './settings.js';
 import {
   CARD_COLUMNS, CARD_FROM, HttpError, UNDO_MINUTES, activeIds, addComment, applyEdit, canEdit, escapeLike, flagTask,
-  joinTask, myTasks, reopenInside, resolveFlag, taskDetail, undoBatch,
+  joinTask, lockTask, myTasks, reopenInside, resolveFlag, reviewersOf, suggestedTasks, taskDetail, undoBatch,
 } from './tasks.js';
 
 // What the connector can read and change, beyond adding tasks (capture.js).
@@ -86,6 +86,7 @@ export function taskRow(t, lang, origin) {
     flagged: t.open_flags > 0,
     url: `${origin}/tasks/${t.id}`,
   };
+  if (t.reviewer_name) row.reviewer = t.reviewer_name;
   if (t.closed_at) row.closed_reason = REASON_OUT[t.close_reason];
   return row;
 }
@@ -139,6 +140,7 @@ export async function searchTasks(f, actor, { timezone, origin }) {
   const resolve = personResolver(actor, await teamPeople(), problems);
   const personId = f.person ? resolve(f.person) : null;
   const creatorId = f.creator ? resolve(f.creator) : null;
+  const reviewerId = f.reviewer ? resolve(f.reviewer) : null;
   let labelIds = [];
   if (f.label) {
     const labels = await allLabels();
@@ -164,6 +166,7 @@ export async function searchTasks(f, actor, { timezone, origin }) {
   }
   if (f.unassigned) where.push('NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id)');
   if (creatorId) where.push(`t.creator_id = ${add(creatorId)}::uuid`);
+  if (reviewerId) where.push(`t.reviewer_id = ${add(reviewerId)}::uuid`);
   if (labelIds.length) where.push(`EXISTS (SELECT 1 FROM task_labels tl WHERE tl.task_id = t.id AND tl.label_id = ANY(${add(labelIds)}::int[]))`);
   if (f.priority.length) where.push(`t.priority = ANY(${add(f.priority.map((p) => PRIORITY_IN[p]))}::text[])`);
   if (f.due === 'overdue') where.push(`(t.closed_at IS NULL AND t.due_date < ${add(today)}::date)`);
@@ -229,8 +232,9 @@ export async function myWork(actor, { timezone, origin, wipLimit }) {
   const mine = (await myTasks(actor.id)).slice(0, 50).map((r) => taskRow(r, actor.lang, origin));
   const waiting = (await q(
     `SELECT ${CARD_COLUMNS} ${CARD_FROM}
-     WHERE t.closed_at IS NULL AND t.status = 'review' AND t.creator_id = $1
-       AND NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = $1)
+     WHERE t.closed_at IS NULL AND t.status = 'review'
+       AND (t.reviewer_id = $1 OR (t.reviewer_id IS NULL AND t.creator_id = $1
+            AND NOT EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = $1)))
      ORDER BY t.updated_at ASC LIMIT ${PER_PAGE}`,
     [actor.id],
   )).rows.map((r) => taskRow(r, actor.lang, origin));
@@ -350,7 +354,15 @@ export async function updateTasks(input, actor, ip, opts) {
   const labels = await allLabels();
   const labelsIn = resolveLabels(input.add_labels, labels);
   const labelsOut = resolveLabels(input.remove_labels, labels);
-  const missing = [...adding.missing, ...removing.missing, ...labelsIn.missing, ...labelsOut.missing];
+  // The reviewer must have an account; null clears it.
+  let reviewerId;
+  const reviewerMissing = [];
+  if (input.reviewer === null) reviewerId = null;
+  else if (input.reviewer !== undefined) {
+    const withAccounts = people.filter((p) => p.has_account);
+    reviewerId = personResolver(actor, withAccounts, reviewerMissing)(input.reviewer);
+  }
+  const missing = [...adding.missing, ...removing.missing, ...labelsIn.missing, ...labelsOut.missing, ...reviewerMissing];
   // Nothing changes while a name or label is unclear: ask, then try again.
   if (missing.length) return { changed: false, missing };
   const why = confirmationReasons({ count: input.task_ids.length, removesOthers: removing.ids.some((u) => u !== actor.id) });
@@ -363,12 +375,13 @@ export async function updateTasks(input, actor, ip, opts) {
     const labelOut = (list) => list.map((lid) => labelName(labels.find((l) => l.id === lid), actor.lang));
     if (labelsIn.ids.length) changes.add_labels = labelOut(labelsIn.ids);
     if (labelsOut.ids.length) changes.remove_labels = labelOut(labelsOut.ids);
+    if (reviewerId !== undefined) changes.reviewer = reviewerId ? names[reviewerId] : null;
     const summary = { kind: 'update', count: input.task_ids.length, tasks: await titles(input.task_ids), changes };
     return { changed: false, why, preview: await createPreview('update', input, summary, actor, origin) };
   }
 
   const editing = input.priority !== undefined || input.due_date !== undefined || input.title !== undefined
-    || input.description !== undefined || input.team_task !== undefined
+    || input.description !== undefined || input.team_task !== undefined || reviewerId !== undefined
     || adding.ids.length > 0 || removing.ids.length > 0 || labelsIn.ids.length > 0 || labelsOut.ids.length > 0;
   const batch = randomUUID();
   const tag = { batch, via: VIA, ...opts.extra };
@@ -396,7 +409,7 @@ export async function updateTasks(input, actor, ip, opts) {
           await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: current.status, to, ...tag }, ip });
           touched = true;
         }
-        if (touched && to === 'review') review.push({ task: current, userIds: [current.creator_id] });
+        if (touched && to === 'review') review.push({ task: current, userIds: [] });
       }
 
       if (editing) {
@@ -415,12 +428,18 @@ export async function updateTasks(input, actor, ip, opts) {
             labels: [...labelIds.filter((l) => !labelsOut.ids.includes(l)), ...labelsIn.ids.filter((l) => !labelIds.includes(l))],
             assignees: nextAssignees,
             team_task: input.team_task ?? current.team_task,
+            reviewer_id: reviewerId,
           }, actor, ip, tag);
           if (changed && adding.ids.some((u) => !assigned.includes(u))) await settleNoAssignee(db, id, actor, ip, tag);
           touched = touched || changed;
         }
       }
       if (touched) updated.push(id);
+    }
+    // Told after any change of reviewer in the same call: the reviewer, or else the creator.
+    for (const item of review) {
+      const now = (await db.query('SELECT reviewer_id, creator_id FROM tasks WHERE id = $1', [item.task.id])).rows[0];
+      item.userIds = reviewersOf(now);
     }
     await notifyBatch(db, { kind: 'review', actor, items: review });
   });
@@ -575,6 +594,7 @@ export async function teamOverview(actor, { timezone, wipLimit }) {
     you: actor.name,
     your_role: actor.role,
     your_language: actor.lang,
+    your_skills: await skillsOf(actor),
     timezone,
     people: people.map((p) => ({ name: p.name, has_account: p.has_account })),
     labels: (await allLabels()).map((l) => ({ en: l.name_en, ar: l.name_ar })),
@@ -649,3 +669,113 @@ export async function addTasks(data, actor, ip, opts) {
 }
 
 export const createFromPreview = (payload, actor, ip, opts) => addTasks(payload, actor, ip, opts);
+
+// ---------- skills, suggestions and taking a task ----------
+
+export async function skillsOf(actor) {
+  return (await q('SELECT skills FROM users WHERE id = $1', [actor.id])).rows[0]?.skills || [];
+}
+
+// mode: add (default), remove or replace.
+export async function setSkills({ skills, mode }, actor) {
+  const current = await skillsOf(actor);
+  const same = (a, b) => a.toLowerCase() === b.toLowerCase();
+  let next;
+  if (mode === 'replace') next = skills;
+  else if (mode === 'remove') next = current.filter((s) => !skills.some((x) => same(x, s)));
+  else next = [...current, ...skills.filter((x) => !current.some((s) => same(x, s)))];
+  if (next.length > 20) throw new HttpError(400, 'at most 20 skills');
+  await q('UPDATE users SET skills = $2 WHERE id = $1', [actor.id, next]);
+  return { your_skills: next };
+}
+
+const PRIORITY_WEIGHT = { high: 3, med: 2, low: 1 };
+const contains = (text, phrase) => {
+  const p = normaliseName(phrase);
+  return p.length > 1 && ` ${text} `.includes(` ${p} `);
+};
+
+// Open tasks the person isn't on, ranked by how well they fit: priority, their
+// saved skills (matched in titles, descriptions and labels), labels of work they
+// were credited for in the last 90 days, team tasks, due dates and waiting time.
+// Each comes with the reasons and what is unknown, so nothing is guessed.
+export async function suggest({ limit }, actor, { timezone, origin, wipLimit }) {
+  const today = localToday(timezone);
+  const skills = await skillsOf(actor);
+  const recent = (await q(
+    `SELECT l.id, l.name_en, l.name_ar, count(*)::int AS n
+     FROM task_credits tc JOIN tasks t ON t.id = tc.task_id JOIN task_labels tl ON tl.task_id = t.id JOIN labels l ON l.id = tl.label_id
+     WHERE tc.user_id = $1 AND t.closed_at > now() - interval '90 days'
+     GROUP BY l.id ORDER BY n DESC, l.id`,
+    [actor.id],
+  )).rows;
+  const { rows, total } = await suggestedTasks(actor.id, { limit: 60 });
+  const descriptions = new Map(rows.length
+    ? (await q('SELECT id, description FROM tasks WHERE id = ANY($1::int[])', [rows.map((r) => r.id)])).rows.map((r) => [r.id, r.description])
+    : []);
+  const ranked = rows.map((r, order) => {
+    const description = descriptions.get(r.id) || '';
+    const text = normaliseName([r.title, description, ...r.labels.flatMap((l) => [l.name_en, l.name_ar])].join(' '));
+    const skillHits = skills.filter((sk) => contains(text, sk));
+    const labelHits = recent.filter((l) => r.labels.some((x) => x.id === l.id)).map((l) => labelName(l, actor.lang));
+    const overdue = !!r.due_date && r.due_date < today;
+    const dueSoon = !!r.due_date && !overdue && r.due_date <= addDays(today, 7);
+    const waitingDays = Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400000);
+    const score = PRIORITY_WEIGHT[r.priority] + 2 * skillHits.length + labelHits.length + (r.team_task ? 1 : 0)
+      + (overdue ? 2 : dueSoon ? 1 : 0) + (waitingDays > 14 ? 0.5 : 0) - (r.status === 'backlog' ? 0.5 : 0);
+    const unknown = [];
+    if (!r.due_date) unknown.push('due_date');
+    if (!description.trim()) unknown.push('description');
+    return {
+      order,
+      score,
+      task: {
+        ...taskRow(r, actor.lang, origin),
+        why: {
+          skills: skillHits, like_work_you_finished: labelHits, team_task: !!r.team_task, others_on_it: r.assignees.map((a) => a.name),
+          overdue, due_soon: dueSoon, waiting_days: waitingDays,
+        },
+        unknown,
+        score,
+      },
+    };
+  }).sort((a, b) => b.score - a.score || a.order - b.order);
+  return {
+    skills_saved: skills.length > 0,
+    your_skills: skills,
+    your_recent_labels: recent.slice(0, 5).map((l) => labelName(l, actor.lang)),
+    your_in_progress: (await q(
+      `SELECT count(*)::int AS n FROM tasks t WHERE t.closed_at IS NULL AND t.status = 'progress'
+         AND EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = $1)`,
+      [actor.id],
+    )).rows[0].n,
+    team_in_progress: { now: await inProgressCount(), limit: await getWipLimit(wipLimit) },
+    open_tasks_you_are_not_on: total,
+    candidates: ranked.slice(0, limit).map((x) => x.task),
+  };
+}
+
+// Join a task and move it to In progress in one go (one Undo).
+export async function takeTask(id, actor, ip, { origin, wipLimit }) {
+  const batch = randomUUID();
+  const tag = { batch, via: VIA };
+  await tx(async (db) => {
+    const task = await lockTask(db, id);
+    if (task.closed_at) throw new HttpError(409, 'task closed');
+    const { rowCount } = await db.query('INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [id, actor.id]);
+    if (rowCount) {
+      await audit(db, { actorId: actor.id, action: 'task.edited', taskId: id, details: { changes: { assignees: { added: [actor.id], removed: [] } }, ...tag }, ip });
+      await settleNoAssignee(db, id, actor, ip, tag);
+    }
+    if (task.status !== 'progress') {
+      await db.query(`UPDATE tasks SET status = 'progress' WHERE id = $1`, [id]);
+      await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: task.status, to: 'progress', ...tag }, ip });
+    }
+    await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [id]);
+  });
+  const row = (await q(`SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE t.id = $1`, [id])).rows[0];
+  const result = { taken: true, batch, undo_until: undoUntil(UNDO_MINUTES), task: taskRow(row, actor.lang, origin) };
+  const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(wipLimit)]);
+  if (count > limit) result.warning = `In progress now has ${count} tasks, over the team's limit of ${limit}.`;
+  return result;
+}

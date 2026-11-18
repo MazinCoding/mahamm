@@ -559,6 +559,20 @@ await step('connected-apps', async () => {
   await frame.locator('h2', { hasText: 'Confirmed' }).waitFor({ timeout: 5000 });
   await shot(page, '34h-card-confirmed');
   note(`check: card Confirm changed the tasks = ${(await one('SELECT priority FROM tasks WHERE id = $1', [six[0].id])).priority}; card says "${(await cardText(frame)).slice(0, 60)}"`);
+
+  await tool('set_my_skills', { skills: ['Excel', 'Printing'] });
+  const picks = await tool('suggest_tasks', { limit: 5 });
+  note(`check: suggestions = ${picks.structuredContent.candidates.length}, first has reasons = ${JSON.stringify(picks.structuredContent.candidates[0]?.why || {})}`);
+  frame = await showCard(page, picks, '34i-card-suggestions');
+  await showCard(mobile, picks, '34j-phone-card-suggestions');
+  const firstPick = picks.structuredContent.candidates[0];
+  if (firstPick) {
+    await frame.getByRole('button', { name: 'Take it' }).first().click();
+    await frame.getByRole('button', { name: 'Undo' }).first().waitFor({ timeout: 5000 });
+    const taken = await one(`SELECT t.status, EXISTS (SELECT 1 FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = t.id AND u.email = 'ahmed@example.com') AS mine FROM tasks t WHERE t.id = $1`, [firstPick.id]);
+    note(`check: card Take it = status ${taken.status}, assigned to me ${taken.mine}`);
+    await shot(page, '34k-card-taken');
+  }
   await page.goto(`${base}/settings#apps`);
   note(`check: connected apps listed = ${await page.locator('#apps .device').count()}`);
   await shot(page, '32-settings-apps');

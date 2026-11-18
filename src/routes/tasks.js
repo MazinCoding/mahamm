@@ -439,10 +439,11 @@ export default function taskRoutes(config) {
     // Keep currently assigned people visible even if their account was disabled.
     for (const a of task.assignees) if (!people.some((p) => p.id === a.id)) people.push({ id: a.id, name: a.name });
     res.render('tasks/form.njk', {
-      mode: 'edit', task, labels, people, errors: {},
+      mode: 'edit', task, labels, people, reviewers: people.filter((p) => p.email), errors: {},
       values: {
         title: task.title, description: task.description, priority: task.priority, due_date: task.due_date || '',
         labels: task.labels.map((l) => String(l.id)), assignees: task.assignees.map((a) => a.id), team_task: task.team_task,
+        reviewer_id: task.reviewer_id || '',
       },
     });
   });
@@ -453,7 +454,9 @@ export default function taskRoutes(config) {
     const result = parse(editTaskSchema, req.body);
     if (result.errors) {
       const [labels, people] = await Promise.all([allLabels(), activePeople()]);
-      return res.status(400).render('tasks/form.njk', { mode: 'edit', task, labels, people, errors: result.errors, values: formValues(req.body) });
+      return res.status(400).render('tasks/form.njk', {
+        mode: 'edit', task, labels, people, reviewers: people.filter((p) => p.email), errors: result.errors, values: formValues(req.body),
+      });
     }
     const { changed } = await updateTask(task.id, result.data, req.user, req.ip);
     flash(req, changed ? req.t('task.saved') : req.t('task.noChanges'));
@@ -646,6 +649,7 @@ function formValues(body) {
     priority: ['high', 'med', 'low'].includes(body.priority) ? body.priority : 'med',
     due_date: String(body.due_date || '').slice(0, 10),
     team_task: body.team_task === 'on',
+    reviewer_id: String(body.reviewer_id || ''),
     labels: arr(body.labels),
     assignees: arr(body.assignees),
   };

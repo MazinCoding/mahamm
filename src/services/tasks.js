@@ -8,6 +8,9 @@ export const CLOSE_REASONS = ['completed', 'notneeded', 'duplicate', 'mistake'];
 export const FLAG_REASONS = ['mistake', 'wrong', 'duplicate', 'other'];
 export const PRIORITIES = ['high', 'med', 'low'];
 
+// Who hears about a task moving to Review: its reviewer, or else its creator.
+export const reviewersOf = (task) => [task.reviewer_id || task.creator_id];
+
 export class HttpError extends Error {
   constructor(status, message = 'error') {
     super(message);
@@ -18,6 +21,7 @@ export class HttpError extends Error {
 // Shared column list for cards and rows: people, labels and counts as JSON.
 export const CARD_COLUMNS = `
   t.id, t.title, t.status, t.priority, t.due_date, t.created_at, t.closed_at, t.close_reason, t.creator_id, t.imported, t.team_task,
+  t.reviewer_id, (SELECT name FROM users r WHERE r.id = t.reviewer_id) AS reviewer_name,
   cu.name AS creator_name, cb.name AS closed_by_name, t.closed_by,
   COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name) ORDER BY u.name)
             FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = t.id), '[]') AS assignees,
@@ -290,6 +294,16 @@ export async function applyEdit(db, current, data, actor, ip, extra = {}) {
   // Only the edit form and the connector send team_task; other callers leave it as it is.
   const team = typeof data.team_task === 'boolean' ? data.team_task : current.team_task;
   if (team !== current.team_task) changes.team_task = { from: current.team_task, to: team };
+  // The reviewer, when given (null clears it), must be an active person with an account.
+  let reviewer = current.reviewer_id || null;
+  if (data.reviewer_id !== undefined && (data.reviewer_id || null) !== reviewer) {
+    if (data.reviewer_id) {
+      const ok = await db.query(`SELECT 1 FROM users WHERE id = $1 AND status = 'active' AND email IS NOT NULL`, [data.reviewer_id]);
+      if (!ok.rows[0]) throw new HttpError(400, 'bad reviewer');
+    }
+    changes.reviewer = { from: reviewer, to: data.reviewer_id || null };
+    reviewer = data.reviewer_id || null;
+  }
 
   const before = (await db.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
   // New assignees must be active; people already assigned stay if still ticked, even if since disabled.
@@ -308,8 +322,8 @@ export async function applyEdit(db, current, data, actor, ip, extra = {}) {
   if (Object.keys(changes).length === 0) return false;
 
   await db.query(
-    `UPDATE tasks SET title = $2, description = $3, priority = $4, due_date = $5, team_task = $6, updated_at = now() WHERE id = $1`,
-    [id, data.title, data.description, data.priority, due, team],
+    `UPDATE tasks SET title = $2, description = $3, priority = $4, due_date = $5, team_task = $6, reviewer_id = $7, updated_at = now() WHERE id = $1`,
+    [id, data.title, data.description, data.priority, due, team, reviewer],
   );
   if (removed.length) await db.query('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = ANY($2::uuid[])', [id, removed]);
   if (added.length) await db.query('INSERT INTO task_assignees (task_id, user_id) SELECT $1, unnest($2::uuid[])', [id, added]);
@@ -332,7 +346,7 @@ export async function saveDetails(id, data, actor, ip) {
     if (data.status && data.status !== current.status) {
       await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [id, data.status]);
       await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: current.status, to: data.status, batch }, ip });
-      if (data.status === 'review') await notify(db, { kind: 'review', taskId: id, task: current, actor, userIds: [current.creator_id] });
+      if (data.status === 'review') await notify(db, { kind: 'review', taskId: id, task: current, actor, userIds: reviewersOf(current) });
       moved = true;
     }
     const edited = await applyEdit(db, current, {
@@ -367,7 +381,7 @@ export async function moveTask(id, to, actor, ip) {
     if (task.closed_at) await reopenInside(db, task, actor, ip, to);
     else await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [id, to]);
     await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from, to }, ip });
-    if (to === 'review') await notify(db, { kind: 'review', taskId: id, task, actor, userIds: [task.creator_id] });
+    if (to === 'review') await notify(db, { kind: 'review', taskId: id, task, actor, userIds: reviewersOf(task) });
     return { changed: true };
   });
 }
@@ -383,7 +397,7 @@ export async function bulkApply(ids, { op, value }, actor, ip) {
   const batch = randomUUID();
   return tx(async (db) => {
     const { rows: found } = await db.query(
-      `SELECT t.id, t.title, t.status, t.priority, t.due_date, t.creator_id, t.closed_at,
+      `SELECT t.id, t.title, t.status, t.priority, t.due_date, t.creator_id, t.reviewer_id, t.closed_at,
               COALESCE((SELECT array_agg(ta.user_id::text) FROM task_assignees ta WHERE ta.task_id = t.id), '{}') AS assignee_ids,
               COALESCE((SELECT array_agg(tl.label_id) FROM task_labels tl WHERE tl.task_id = t.id), '{}') AS label_ids
        FROM tasks t WHERE t.id = ANY($1::int[]) ORDER BY t.id FOR UPDATE OF t`,
@@ -412,7 +426,7 @@ export async function bulkApply(ids, { op, value }, actor, ip) {
         await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [t.id, value]);
         await audit(db, { actorId: actor.id, action: 'task.moved', taskId: t.id, details: { from: t.status, to: value, batch }, ip });
         updated.push(t.id);
-        if (value === 'review') review.push({ task: t, userIds: [t.creator_id] });
+        if (value === 'review') review.push({ task: t, userIds: reviewersOf(t) });
       }
       await notifyBatch(db, { kind: 'review', actor, items: review });
     }
@@ -609,6 +623,10 @@ export async function undoBatch(batch, actor, ip) {
         if (c.team_task) {
           await db.query('UPDATE tasks SET team_task = $2 WHERE id = $1', [t.id, c.team_task.from]);
           back.team_task = { from: c.team_task.to, to: c.team_task.from };
+        }
+        if (c.reviewer) {
+          await db.query('UPDATE tasks SET reviewer_id = $2 WHERE id = $1', [t.id, c.reviewer.from]);
+          back.reviewer = { from: c.reviewer.to, to: c.reviewer.from };
         }
         if (c.labels) {
           for (const l of c.labels.added || []) await db.query('DELETE FROM task_labels WHERE task_id = $1 AND label_id = $2', [t.id, l]);

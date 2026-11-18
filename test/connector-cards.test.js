@@ -26,7 +26,7 @@ describe('connector: cards', () => {
     assert.ok(init.result.capabilities.resources);
     const { tools } = (await rpc(token, 'tools/list', {})).result;
     const withCard = tools.filter((t) => t._meta?.ui?.resourceUri === CARD_URI).map((t) => t.name);
-    assert.deepEqual(withCard, ['my_work', 'get_task', 'create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'admin_change']);
+    assert.deepEqual(withCard, ['my_work', 'get_task', 'create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'suggest_tasks', 'take_task', 'admin_change']);
     for (const name of ['confirm_preview', 'cancel_preview']) {
       const t = tools.find((x) => x.name === name);
       assert.deepEqual(t._meta.ui.visibility, ['app']);

@@ -44,7 +44,7 @@ export default function meRoutes(config) {
   });
 
   r.get('/settings', requireAuth, async (req, res) => {
-    const me = await one('SELECT name, email, lang, email_notifications, totp_enabled, cardinality(recovery_codes) AS codes_left FROM users WHERE id = $1', [req.user.id]);
+    const me = await one('SELECT name, email, lang, email_notifications, skills, totp_enabled, cardinality(recovery_codes) AS codes_left FROM users WHERE id = $1', [req.user.id]);
     const mine = deviceTokenFrom(req, config);
     const mineHash = mine ? hashToken(mine) : null;
     const devices = (await listDevices(req.user.id)).map(({ token_hash: th, ...d }) => ({ ...d, current: th === mineHash }));
@@ -60,8 +60,8 @@ export default function meRoutes(config) {
       req.session.flash = { type: 'warn', text: req.t('settings.nameRequired') };
       return res.redirect('/settings');
     }
-    await q('UPDATE users SET name = $2, lang = $3, email_notifications = $4 WHERE id = $1',
-      [req.user.id, result.data.name, result.data.lang, result.data.email_notifications]);
+    await q('UPDATE users SET name = $2, lang = $3, email_notifications = $4, skills = $5 WHERE id = $1',
+      [req.user.id, result.data.name, result.data.lang, result.data.email_notifications, result.data.skills]);
     req.session.lang = result.data.lang;
     req.session.flash = { type: 'ok', text: req.t('settings.saved') };
     res.redirect('/settings');

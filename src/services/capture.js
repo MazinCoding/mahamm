@@ -3,7 +3,7 @@ import { audit } from '../audit.js';
 import { q, tx } from '../db.js';
 import { translator } from '../i18n.js';
 import { notifyBatch } from '../notify.js';
-import { HttpError, applyEdit, canEdit, getTask, lockTask } from './tasks.js';
+import { HttpError, applyEdit, canEdit, getTask, lockTask, reviewersOf } from './tasks.js';
 
 // Tasks captured through the connector: created straight away from what a
 // person said or typed, with a short Undo. The rules (agreed in the connector
@@ -236,7 +236,7 @@ export async function updateCaptured(id, changes, actor, ip, { origin }) {
       await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [id, changes.status]);
       await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: current.status, to: changes.status, batch, via: 'connector' }, ip });
       if (changes.status === 'review') {
-        await notifyBatch(db, { kind: 'review', actor, items: [{ task: current, userIds: [current.creator_id] }] });
+        await notifyBatch(db, { kind: 'review', actor, items: [{ task: current, userIds: reviewersOf(current) }] });
       }
     }
 
