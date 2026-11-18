@@ -442,7 +442,7 @@ export default function taskRoutes(config) {
       mode: 'edit', task, labels, people, errors: {},
       values: {
         title: task.title, description: task.description, priority: task.priority, due_date: task.due_date || '',
-        labels: task.labels.map((l) => String(l.id)), assignees: task.assignees.map((a) => a.id),
+        labels: task.labels.map((l) => String(l.id)), assignees: task.assignees.map((a) => a.id), team_task: task.team_task,
       },
     });
   });
@@ -645,6 +645,7 @@ function formValues(body) {
     status: body.status === 'backlog' ? 'backlog' : 'todo',
     priority: ['high', 'med', 'low'].includes(body.priority) ? body.priority : 'med',
     due_date: String(body.due_date || '').slice(0, 10),
+    team_task: body.team_task === 'on',
     labels: arr(body.labels),
     assignees: arr(body.assignees),
   };

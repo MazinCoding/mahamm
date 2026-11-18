@@ -58,6 +58,7 @@
     <span class="num">#{{ task.id }}</span>
     {{ prio(task.priority) }}
     <span class="status-chip s-{{ task.status }}">{{ t('status.' + task.status) }}</span>
+    {% if task.team_task %}<span class="chip c-blue">{{ t('task.teamTask') }}</span>{% endif %}
     {% if task.open_flags %}<span class="chip c-red">{{ t('flag.flagged') }}</span>{% endif %}
     <span class="grow"></span>
     {% if not task.due_date %}<span class="missing">{{ t('table.noDue') }}</span>

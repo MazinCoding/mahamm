@@ -267,7 +267,9 @@
     "duplicateOf": "Duplicate of",
     "noOne": "No one assigned",
     "noLabels": "No labels",
-    "noDue": "No due date"
+    "noDue": "No due date",
+    "teamTask": "Team task",
+    "teamTaskHint": "Team tasks show first in Suggested, among tasks of the same priority, so others can join them."
   },
   "comment": {
     "label": "Add a comment",
@@ -385,7 +387,9 @@
     "devicesForgotten": "forgot all remembered devices ({count})",
     "appConnected": "connected an app ({app})",
     "appDisconnected": "disconnected an app ({app})",
-    "appsDisconnected": "disconnected all apps ({count})"
+    "appsDisconnected": "disconnected all apps ({count})",
+    "teamTaskOn": "made a team task",
+    "teamTaskOff": "no longer a team task"
   },
   "act": {
     "task": {
@@ -872,5 +876,11 @@
     "allow": "Allow",
     "deny": "Cancel",
     "manage": "You can disconnect it at any time in Settings → Connected apps."
+  },
+  "connector": {
+    "noAssignee": "No assignee.",
+    "noAssigneeSuggested": "No assignee. Suggested: {names} (mentioned in the {where}).",
+    "voice": "voice note",
+    "text": "message"
   }
 }

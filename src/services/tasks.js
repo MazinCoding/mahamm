@@ -17,7 +17,7 @@ export class HttpError extends Error {
 
 // Shared column list for cards and rows: people, labels and counts as JSON.
 const CARD_COLUMNS = `
-  t.id, t.title, t.status, t.priority, t.due_date, t.created_at, t.closed_at, t.close_reason, t.creator_id, t.imported,
+  t.id, t.title, t.status, t.priority, t.due_date, t.created_at, t.closed_at, t.close_reason, t.creator_id, t.imported, t.team_task,
   cu.name AS creator_name, cb.name AS closed_by_name, t.closed_by,
   COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name) ORDER BY u.name)
             FROM task_assignees ta JOIN users u ON u.id = ta.user_id WHERE ta.task_id = t.id), '[]') AS assignees,
@@ -64,9 +64,9 @@ export async function myTasks(userId) {
   return rows;
 }
 
-// Home: open tasks someone isn't on yet. Priority first; within a priority, tasks
-// others are already working on, then unassigned ones, then Backlog; then the
-// soonest due date and the oldest task.
+// Home: open tasks someone isn't on yet. Priority first; within a priority, team
+// tasks, then tasks others are already working on, then unassigned ones, then
+// Backlog; then the soonest due date and the oldest task.
 export const SUGGESTED_PAGE = 50;
 
 export async function suggestedTasks(userId, { limit = 5, offset = 0 } = {}) {
@@ -76,6 +76,7 @@ export async function suggestedTasks(userId, { limit = 5, offset = 0 } = {}) {
     `SELECT ${CARD_COLUMNS} ${CARD_FROM}
      WHERE t.closed_at IS NULL AND ${notMine}
      ORDER BY CASE t.priority WHEN 'high' THEN 0 WHEN 'med' THEN 1 ELSE 2 END,
+              CASE WHEN t.team_task THEN 0 ELSE 1 END,
               CASE WHEN t.status = 'backlog' THEN 2
                    WHEN EXISTS (SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id) THEN 0
                    ELSE 1 END,
@@ -241,7 +242,7 @@ export function canResolveFlags(user, task) {
 }
 
 // Only active people can be assigned or credited; anything else is dropped.
-async function activeIds(db, ids) {
+export async function activeIds(db, ids) {
   if (!ids || ids.length === 0) return [];
   const { rows } = await db.query(`SELECT id FROM users WHERE id = ANY($1::uuid[]) AND status = 'active'`, [ids]);
   return rows.map((r) => r.id);
@@ -278,7 +279,7 @@ export async function updateTask(id, data, actor, ip) {
 
 // Shared by the edit form and Home's details sheet: work out what changed, save it,
 // and write one `task.edited` entry (plus `extra`, such as a batch id for Undo).
-async function applyEdit(db, current, data, actor, ip, extra = {}) {
+export async function applyEdit(db, current, data, actor, ip, extra = {}) {
   const { id } = current;
   const changes = {};
   for (const field of ['title', 'description', 'priority']) {
@@ -286,6 +287,9 @@ async function applyEdit(db, current, data, actor, ip, extra = {}) {
   }
   const due = data.due_date || null;
   if (due !== (current.due_date || null)) changes.due_date = { from: current.due_date || null, to: due };
+  // Only the edit form and the connector send team_task; other callers leave it as it is.
+  const team = typeof data.team_task === 'boolean' ? data.team_task : current.team_task;
+  if (team !== current.team_task) changes.team_task = { from: current.team_task, to: team };
 
   const before = (await db.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
   // New assignees must be active; people already assigned stay if still ticked, even if since disabled.
@@ -304,8 +308,8 @@ async function applyEdit(db, current, data, actor, ip, extra = {}) {
   if (Object.keys(changes).length === 0) return false;
 
   await db.query(
-    `UPDATE tasks SET title = $2, description = $3, priority = $4, due_date = $5, updated_at = now() WHERE id = $1`,
-    [id, data.title, data.description, data.priority, due],
+    `UPDATE tasks SET title = $2, description = $3, priority = $4, due_date = $5, team_task = $6, updated_at = now() WHERE id = $1`,
+    [id, data.title, data.description, data.priority, due, team],
   );
   if (removed.length) await db.query('DELETE FROM task_assignees WHERE task_id = $1 AND user_id = ANY($2::uuid[])', [id, removed]);
   if (added.length) await db.query('INSERT INTO task_assignees (task_id, user_id) SELECT $1, unnest($2::uuid[])', [id, added]);
@@ -339,7 +343,7 @@ export async function saveDetails(id, data, actor, ip) {
   });
 }
 
-async function lockTask(db, id) {
+export async function lockTask(db, id) {
   const { rows } = await db.query('SELECT * FROM tasks WHERE id = $1 FOR UPDATE', [id]);
   if (!rows[0]) throw new HttpError(404, 'task not found');
   return rows[0];
@@ -591,6 +595,10 @@ export async function undoBatch(batch, actor, ip) {
         if (c.due_date) {
           await db.query('UPDATE tasks SET due_date = $2 WHERE id = $1', [t.id, c.due_date.from]);
           back.due_date = { from: c.due_date.to, to: c.due_date.from };
+        }
+        if (c.team_task) {
+          await db.query('UPDATE tasks SET team_task = $2 WHERE id = $1', [t.id, c.team_task.from]);
+          back.team_task = { from: c.team_task.to, to: c.team_task.from };
         }
         if (c.labels) {
           for (const l of c.labels.added || []) await db.query('DELETE FROM task_labels WHERE task_id = $1 AND label_id = $2', [t.id, l]);
