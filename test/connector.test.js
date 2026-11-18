@@ -69,7 +69,14 @@ describe('connector: protocol', () => {
     const odd = await rpc(token, 'initialize', { protocolVersion: '1999-01-01' });
     assert.equal(odd.body.result.protocolVersion, '2025-11-25');
     const list = await rpc(token, 'tools/list', {});
-    assert.deepEqual(list.body.result.tools.map((t) => t.name), ['get_team', 'create_tasks', 'update_task', 'undo_created_tasks']);
+    assert.deepEqual(list.body.result.tools.map((t) => t.name), [
+      'get_team', 'my_work', 'search_tasks', 'get_task', 'workload', 'get_activity',
+      'create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'add_comment', 'flag_task', 'undo', 'mark_read',
+    ]);
+    for (const tool of list.body.result.tools) {
+      assert.equal(typeof tool.annotations.readOnlyHint, 'boolean', tool.name);
+      assert.equal(tool.inputSchema.type, 'object', tool.name);
+    }
     const note = await request(app).post('/connector').set('Authorization', `Bearer ${token}`).send({ jsonrpc: '2.0', method: 'notifications/initialized' });
     assert.equal(note.status, 202);
     const unknown = await rpc(token, 'resources/subscribe', {});

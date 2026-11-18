@@ -203,6 +203,82 @@ export const connectorUpdateSchema = z.object({
 });
 export const connectorUndoSchema = z.object({ batch: z.string().uuid() });
 
+const taskId = z.number().int().min(1).max(999999999);
+const taskIds = z.array(taskId).min(1).max(50).transform((ids) => [...new Set(ids)]);
+const connectorLabel = z.preprocess(cleanLine, z.string().min(1).max(40));
+const names = z.array(connectorName).max(10).default([]);
+export const connectorSearchSchema = z.object({
+  words: z.array(z.preprocess(cleanLine, z.string().min(1).max(60))).max(8).default([]),
+  status: z.array(z.enum(['backlog', 'todo', 'in_progress', 'review', 'done'])).max(5).default([]),
+  person: connectorName.optional(),
+  unassigned: z.boolean().default(false),
+  creator: connectorName.optional(),
+  label: connectorLabel.optional(),
+  priority: z.array(connectorPriority).max(3).default([]),
+  due: z.enum(['overdue', 'today', 'this_week', 'none']).optional(),
+  due_before: isoDate.optional(),
+  team_task: z.boolean().optional(),
+  flagged: z.boolean().optional(),
+  not_updated_for_days: z.number().int().min(1).max(365).optional(),
+  closed_within_days: z.number().int().min(1).max(365).default(30),
+  sort: z.enum(['priority', 'due', 'updated', 'newest', 'oldest']).default('priority'),
+  page: z.number().int().min(1).max(1000).default(1),
+});
+export const connectorTaskSchema = z.object({ task_id: taskId });
+export const connectorActivitySchema = z.object({
+  person: connectorName.optional(),
+  task_id: taskId.optional(),
+  kinds: z.array(z.enum(['created', 'moved', 'edited', 'closed', 'reopened', 'commented', 'flagged', 'files'])).max(8).default([]),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  limit: z.number().int().min(1).max(200).default(50),
+});
+export const connectorUpdateManySchema = z.object({
+  task_ids: taskIds,
+  status: z.enum(['backlog', 'todo', 'in_progress', 'review']).optional(),
+  priority: connectorPriority.optional(),
+  due_date: connectorDate.optional(),
+  add_assignees: names,
+  remove_assignees: names,
+  add_labels: z.array(connectorLabel).max(10).default([]),
+  remove_labels: z.array(connectorLabel).max(10).default([]),
+  title: z.preprocess(cleanLine, z.string().min(1).max(200)).optional(),
+  description: z.preprocess(clean, z.string().max(10000)).optional(),
+  team_task: z.boolean().optional(),
+}).refine((d) => (d.title === undefined && d.description === undefined) || d.task_ids.length === 1, {
+  message: 'title and description can only be changed on one task at a time', path: ['title'],
+});
+export const connectorCloseSchema = z.object({
+  task_ids: taskIds,
+  reason: z.enum(['completed', 'not_needed', 'duplicate', 'mistake']),
+  credit: names,
+  duplicate_of: taskId.optional(),
+});
+export const connectorCommentSchema = z.object({
+  task_id: taskId,
+  text: z.preprocess(clean, z.string().min(1).max(4000)),
+  mention: names,
+  nudge: z.boolean().default(false),
+});
+export const connectorFlagSchema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('raise'),
+    task_id: taskId,
+    reason: z.enum(['mistake', 'wrong', 'duplicate', 'other']),
+    note: z.preprocess(clean, z.string().max(1000)).default(''),
+  }),
+  z.object({
+    action: z.literal('resolve'),
+    task_id: taskId,
+    flag_id: z.number().int().min(1).max(999999999).optional(),
+    resolution: z.enum(['fixed', 'dismissed']),
+  }),
+]);
+export const connectorReadSchema = z.union([
+  z.object({ all: z.literal(true) }),
+  z.object({ notification_ids: z.array(z.number().int().min(1)).min(1).max(100) }),
+]);
+
 export const idParam = (value) => (/^\d{1,9}$/.test(String(value)) ? Number(value) : null);
 export const uuidParam = (value) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value)) ? String(value) : null);
 

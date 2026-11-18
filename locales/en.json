@@ -376,6 +376,7 @@
     "labelUpdated": "updated the label {name}",
     "auditExported": "exported the audit log ({rows} rows)",
     "undo": " (undo)",
+    "via": " (via a connected app)",
     "wipLimitChanged": "changed the in-progress limit from {from} to {to}",
     "invitedPerson": "invited {person} as {role} ({email})",
     "inviteAcceptedRenamed": "accepted their invite and changed their name from “{from}”",
