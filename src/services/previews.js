@@ -96,7 +96,7 @@ export async function adminPreview(input, actor, opts) {
   const summary = input.action === 'add_person'
     ? { kind: 'admin', action: 'add_person', name: input.name }
     : { kind: 'admin', action: 'set_in_progress_limit', from: await getWipLimit(opts.wipLimit), to: input.limit };
-  return { changed: false, preview: await createPreview('admin', input, summary, actor, opts.origin) };
+  return { changed: false, why: ['an admin change'], preview: await createPreview('admin', input, summary, actor, opts.origin) };
 }
 
 export async function prunePreviews() {

@@ -336,7 +336,7 @@ function previewResult({ why, preview }) {
     changed: false,
     waiting_for_confirmation: true,
     preview: shown,
-    message: `Nothing has changed yet: ${why.join(' and ')} needs the person's confirmation. Tell them what it will do and ask them to press Confirm on the card, or to open ${shown.confirm_url} (it works for ${PREVIEW_MINUTES} minutes).`,
+    message: `Nothing has changed yet: ${(why || ['this change']).join(' and ')} needs the person's confirmation. Tell them what it will do and ask them to press Confirm on the card, or to open ${shown.confirm_url} (it works for ${PREVIEW_MINUTES} minutes).`,
   };
   return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data, _meta: { 'mahamm/confirm': { preview_id: shown.id, secret } } };
 }
