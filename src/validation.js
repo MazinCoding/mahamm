@@ -181,17 +181,20 @@ export const tokenSchema = z.discriminatedUnion('grant_type', [
 const connectorName = z.preprocess(cleanLine, z.string().min(1).max(100));
 const connectorDate = z.union([isoDate, z.null()]);
 const connectorPriority = z.enum(['high', 'medium', 'low']);
+const connectorLabel = z.preprocess(cleanLine, z.string().min(1).max(40));
 export const captureSchema = z.object({
   source: z.enum(['voice', 'text']).default('text'),
   tasks: z.array(z.object({
     title: z.preprocess(cleanLine, z.string().min(1).max(200)),
+    description: z.preprocess(clean, z.string().max(10000)).optional(),
+    labels: z.array(connectorLabel).max(10).default([]),
     assignees: z.array(connectorName).max(10).default([]),
     assign_to_me: z.boolean().default(false),
     started: z.boolean().default(false),
     team_task: z.boolean().default(false),
     priority: connectorPriority.default('medium'),
     due_date: connectorDate.optional(),
-  })).min(1).max(10),
+  })).min(1).max(50),
 });
 export const connectorUpdateSchema = z.object({
   task_id: z.number().int().min(1).max(999999999),
@@ -205,7 +208,6 @@ export const connectorUndoSchema = z.object({ batch: z.string().uuid() });
 
 const taskId = z.number().int().min(1).max(999999999);
 const taskIds = z.array(taskId).min(1).max(50).transform((ids) => [...new Set(ids)]);
-const connectorLabel = z.preprocess(cleanLine, z.string().min(1).max(40));
 const names = z.array(connectorName).max(10).default([]);
 export const connectorSearchSchema = z.object({
   words: z.array(z.preprocess(cleanLine, z.string().min(1).max(60))).max(8).default([]),
@@ -278,6 +280,13 @@ export const connectorReadSchema = z.union([
   z.object({ all: z.literal(true) }),
   z.object({ notification_ids: z.array(z.number().int().min(1)).min(1).max(100) }),
 ]);
+
+export const connectorAdminSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('add_person'), name: connectorName }),
+  z.object({ action: z.literal('set_in_progress_limit'), limit: z.number().int().min(1).max(50) }),
+]);
+export const connectorConfirmSchema = z.object({ preview_id: z.string().uuid(), secret: z.string().min(20).max(100) });
+export const connectorCancelSchema = z.object({ preview_id: z.string().uuid() });
 
 export const idParam = (value) => (/^\d{1,9}$/.test(String(value)) ? Number(value) : null);
 export const uuidParam = (value) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value)) ? String(value) : null);

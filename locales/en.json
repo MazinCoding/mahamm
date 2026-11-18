@@ -883,5 +883,42 @@
     "noAssigneeSuggested": "No assignee. Suggested: {names} (mentioned in the {where}).",
     "voice": "voice note",
     "text": "message"
+  },
+  "preview": {
+    "title": "Confirm a change",
+    "intro": "You asked a connected app to make this change. Nothing has happened yet.",
+    "update": "Change {count} tasks",
+    "close": "Close {count} tasks",
+    "create": "Add {count} tasks",
+    "addPerson": "Add {name} to the team (no account yet)",
+    "setLimit": "Change the in-progress limit from {from} to {to}",
+    "status": "Status: {value}",
+    "priority": "Priority: {value}",
+    "due": "Due date: {value}",
+    "noDueDate": "No due date",
+    "unassigned": "Unassigned",
+    "addPeople": "Add: {names}",
+    "removePeople": "Take off: {names}",
+    "addLabels": "Add labels: {names}",
+    "removeLabels": "Remove labels: {names}",
+    "teamOn": "Mark them as team tasks",
+    "teamOff": "No longer team tasks",
+    "newTitle": "New title: {value}",
+    "newDescription": "New description",
+    "reason": "Reason: {value}",
+    "credit": "Credit: {names}",
+    "creditAssignees": "Credit: each task's assignees",
+    "duplicateOf": "Duplicate of {n}",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "expires": "This waits for you until {time}.",
+    "done": "Confirmed. The change has been made.",
+    "nothingChanged": "Nothing changed: the names or tasks no longer match. Ask again in the app.",
+    "cancelled": "Cancelled. Nothing changed.",
+    "gone": {
+      "confirmed": "This change was already confirmed.",
+      "cancelled": "This change was cancelled.",
+      "expired": "This change has expired. Ask again in the app if you still want it."
+    }
   }
 }

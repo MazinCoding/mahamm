@@ -1,0 +1,32 @@
+{% extends "layout.njk" %}
+{% block title %}{{ t('preview.title') }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>{{ t('preview.title') }}</h1><p class="sub">{{ t('preview.intro') }}</p></div>
+</div>
+<div class="box preview">
+  <h2 class="preview-what" dir="auto">{{ view.heading }}</h2>
+  {% if view.lines.length %}
+  <ul class="preview-lines">
+    {% for line in view.lines %}<li dir="auto">{{ line }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if view.tasks.length %}
+  <ul class="preview-tasks">
+    {% for task in view.tasks %}<li>{% if task.id %}<a class="muted" href="/tasks/{{ task.id }}">#{{ task.id }}</a> {% endif %}<bdi>{{ task.title }}</bdi>{% if task.note %}<span class="small muted preview-note" dir="auto">{{ task.note }}</span>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if open %}
+  <form method="post" action="/previews/{{ p.id }}/confirm" class="preview-actions">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <button class="btn btn-primary" type="submit">{{ t('preview.confirm') }}</button>
+    <button class="btn btn-secondary" type="submit" formaction="/previews/{{ p.id }}/cancel">{{ t('preview.cancel') }}</button>
+  </form>
+  <p class="hint preview-hint">{{ t('preview.expires', { time: expires }) }}</p>
+  {% else %}
+  <p class="preview-gone" role="status">{{ t('preview.gone.' + gone) }}</p>
+  {% endif %}
+</div>
+{% endblock %}

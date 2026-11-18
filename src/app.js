@@ -14,6 +14,7 @@ import { httpsRedirect, sameOriginWrites, securityHeaders } from './security.js'
 import { rejectUnexpectedMultipart } from './uploads.js';
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
+import previewRoutes from './routes/previews.js';
 import adminRoutes from './routes/admin.js';
 import meRoutes from './routes/me.js';
 import homeRoutes from './routes/home.js';
@@ -150,6 +151,7 @@ export function createApp(config, logger) {
   app.use(homeRoutes(config));
   app.use(oauthConsentRoutes(config));
   app.use(taskRoutes(config));
+  app.use(previewRoutes(config));
   app.use(adminRoutes(config));
 
   app.get('/', (req, res) => res.redirect(req.user ? '/home' : '/login'));

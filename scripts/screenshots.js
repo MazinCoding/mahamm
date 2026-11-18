@@ -11,7 +11,7 @@ import ExcelJS from 'exceljs';
 import { chromium } from 'playwright';
 import { loadConfig } from '../src/config.js';
 import { decryptField, initCrypto } from '../src/crypto.js';
-import { closeDb, initDb, one } from '../src/db.js';
+import { closeDb, initDb, one, q } from '../src/db.js';
 import { currentCode } from '../src/totp.js';
 
 const out = process.argv[2] || 'screens';
@@ -465,6 +465,33 @@ await step('connected-apps', async () => {
     body: new URLSearchParams({ grant_type: 'authorization_code', client_id: reg.client_id, code, redirect_uri: back, code_verifier: verifier }),
   })).json();
   note(`check: app received a code = ${!!code}; tokens issued = ${!!tokens.access_token && !!tokens.refresh_token}`);
+
+  // A big change through the connector waits for the person to confirm it on Mahamm's own page.
+  const tool = async (name, args) => (await (await fetch(`${base}/connector`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.access_token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }),
+  })).json()).result;
+  const { rows: six } = await q('SELECT id FROM tasks WHERE closed_at IS NULL ORDER BY id LIMIT 6');
+  const waiting = await tool('update_tasks', { task_ids: six.map((r) => r.id), add_labels: ['Docs'] });
+  const confirmUrl = waiting?.structuredContent?.preview?.confirm_url;
+  const secret = waiting?._meta?.['mahamm/confirm']?.secret;
+  note(`check: six tasks at once wait for confirmation = ${!!waiting?.structuredContent?.waiting_for_confirmation}; card secret kept out of the text = ${!!secret && !JSON.stringify(waiting.content).includes(secret)}`);
+  await page.goto(confirmUrl);
+  note(`check: confirm page lists ${await page.locator('.preview-tasks li').count()} tasks`);
+  await shot(page, '33-confirm-change');
+  await mobile.goto(confirmUrl);
+  const confirmButtons = await mobile.locator('.preview-actions').boundingBox();
+  note(`check: phone confirm buttons visible = ${!!confirmButtons && confirmButtons.y + confirmButtons.height <= 844}`);
+  await shot(mobile, '33b-phone-confirm-change');
+  await page.click('.topbar form[action="/lang"] button');
+  await page.waitForLoadState('networkidle');
+  note(`check: Arabic confirm page dir = ${await page.getAttribute('html', 'dir')}`);
+  await shot(page, '33c-confirm-change-ar');
+  await page.click('.topbar form[action="/lang"] button');
+  await page.waitForLoadState('networkidle');
+  await Promise.all([page.waitForURL('**/home'), page.click('.preview-actions .btn-primary')]);
+  note(`check: after confirming = ${(await page.locator('.flash').innerText()).trim()}`);
   await page.goto(`${base}/settings#apps`);
   note(`check: connected apps listed = ${await page.locator('#apps .device').count()}`);
   await shot(page, '32-settings-apps');
