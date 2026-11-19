@@ -3,8 +3,8 @@ import { SCOPES, verifyAccessToken } from '../oauth.js';
 import { enforce } from '../ratelimit.js';
 import { updateCaptured } from '../services/capture.js';
 import {
-  MAX_ADD, MAX_DIRECT, activity, addTasks, boardSnapshot, closeTasks, comment, flag, joinOne, markRead, myWork, searchTasks, setSkills,
-  suggest, takeTask, taskInFull, teamOverview, undoAny, updateTasks, workload,
+  MAX_ADD, MAX_DIRECT, activity, addTasks, boardSnapshot, closeTasks, comment, flag, joinOne, markRead, mergeTask, myWork, searchTasks,
+  setSkills, suggest, takeTask, taskInFull, teamOverview, undoAny, updateTasks, workload,
 } from '../services/connector.js';
 import { PREVIEW_MINUTES, adminPreview, cancelPreview, confirmPreview } from '../services/previews.js';
 import { HttpError } from '../services/tasks.js';
@@ -108,7 +108,7 @@ const TOOLS = [
   {
     name: 'get_task',
     title: 'Task details',
-    description: 'Everything about one task: description, people, labels, due date, comments (the latest 20), files with links, flags, how it was closed and who was credited, and its history as sentences in the person\'s language.',
+    description: 'Everything about one task: description, people, labels, due date, comments (the latest 20), files with links, flags, how it was closed and who was credited, its history as sentences in the person\'s language, and "close_match" when it nearly repeats an older task the person can merge it into (merge_tasks).',
     inputSchema: object({ task_id: id }, ['task_id']),
     annotations: READ,
   },
@@ -149,7 +149,7 @@ const TOOLS = [
       '- description and labels (English or Arabic names): only when the person gave them.',
       'Set source to "voice" for a voice note.',
       'The result lists, per task, any name or label that matched nothing under "missing". Ask the person about names, then use update_tasks. The batch id can undo the whole message for one minute.',
-      'A task with "similar" open tasks may be a repeat: mention them and offer to undo and join one instead.',
+      'A task with "close_match" nearly repeats an older task (open, or closed in the last 7 days): it was still added, with a Duplicate flag. Show the person the older task and ask whether to merge them (merge_tasks) or keep both (flag_task resolve, dismissed). "similar" lists looser matches worth a mention.',
       `More than ${MAX_ADD} tasks at once (from meeting notes or a sheet, say) come back as a preview for the person to confirm; nothing is added until they do.`,
     ].join('\n'),
     inputSchema: {
@@ -246,6 +246,13 @@ const TOOLS = [
       mention: names('People to @mention, as named.'),
       nudge: { type: 'boolean' },
     }, ['task_id', 'text']),
+    annotations: WRITE,
+  },
+  {
+    name: 'merge_tasks',
+    title: 'Merge into the older task',
+    description: 'Merge a task into the older task it closely matches (its "close_match"). The newer task is closed as a duplicate of the older one, its people join the older one (only the person merging if they can\'t edit it; nobody if it\'s closed), and its description, labels and due date are posted there as a comment mentioning anyone not added. Nothing is deleted; Undo takes it back within ten minutes. Only the newer task\'s creator or an admin can merge.',
+    inputSchema: object({ task_id: id }, ['task_id']),
     annotations: WRITE,
   },
   {
@@ -351,6 +358,7 @@ const TOOLS = [
 // Tools whose results come with Mahamm's card, for apps that show cards.
 const CARD_TOOLS = new Set([
   'create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'my_work', 'get_task', 'admin_change', 'suggest_tasks', 'take_task', 'open_board',
+  'merge_tasks',
 ]);
 for (const tool of TOOLS) {
   if (CARD_TOOLS.has(tool.name)) tool._meta = { ...tool._meta, ui: { ...tool._meta?.ui, resourceUri: CARD_URI } };
@@ -422,6 +430,8 @@ async function runTool(config, name, args, ctx) {
         if (err.message === 'preview not found') return toolError('There is no such change waiting for this person.');
         if (err.message === 'not confirmed by the person') return toolError('Only the Confirm button on the card can confirm this change.');
         if (err.message === 'name taken') return toolError('Someone active already has that name.');
+        if (err.message === 'no close match') return toolError(`Task #${data.task_id} has no close match waiting to be merged.`);
+        if (err.message === 'creator or admin only') return toolError(`Only whoever added task #${data.task_id}, or an admin, can merge it.`);
         return httpProblem(err, data.task_id ?? (data.task_ids?.length === 1 ? data.task_ids[0] : null));
       }
       throw err;
@@ -455,6 +465,7 @@ async function runTool(config, name, args, ctx) {
     case 'join_task': return run(connectorTaskSchema, (d) => joinOne(d.task_id, user, ip, opts));
     case 'add_comment': return run(connectorCommentSchema, (d) => comment(d, user, ip, opts));
     case 'flag_task': return run(connectorFlagSchema, (d) => flag(d, user, ip));
+    case 'merge_tasks': return run(connectorTaskSchema, (d) => mergeTask(d.task_id, user, ip, opts));
     case 'mark_read': return run(connectorReadSchema, (d) => markRead(d, user));
     case 'suggest_tasks': return run(connectorSuggestSchema, (d) => suggest(d, user, opts));
     case 'open_board': {

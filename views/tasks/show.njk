@@ -21,6 +21,33 @@
   </div>
 </div>
 
+{% if closeMatch %}{% set m = closeMatch.task %}
+<div class="match-box" role="note">
+  <div class="match-text">
+    <strong>{{ t('match.title') }}</strong>
+    <p class="small">{{ t('match.intro') }}</p>
+    <a class="match-task" href="/tasks/{{ m.id }}"><span class="muted">#{{ m.id }}</span> <bdi>{{ m.title }}</bdi></a>
+    <p class="small muted match-meta">{{ t('status.done' if m.closed_at else 'status.' + m.status) }} ·
+      {% if m.assignees.length %}{% for a in m.assignees %}<bdi>{{ a.name }}</bdi>{% if not loop.last %}{{ t('common.listSep') }}{% endif %}{% endfor %}{% else %}{{ t('table.unassigned') }}{% endif %} ·
+      {% if m.due_date %}{{ fmt.date(m.due_date) }}{% else %}{{ t('task.noDue') }}{% endif %}</p>
+  </div>
+  {% if canResolve %}
+  <div class="match-actions">
+    <form method="post" action="/tasks/{{ task.id }}/merge" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+      <button class="btn btn-primary btn-sm" type="submit">{{ t('match.merge', { n: '#' + m.id }) }}</button>
+    </form>
+    <form method="post" action="/tasks/{{ task.id }}/flags/{{ closeMatch.flagId }}/resolve" class="inline">
+      <input type="hidden" name="_csrf" value="{{ csrfToken }}"><input type="hidden" name="resolution" value="dismissed">
+      <button class="btn btn-secondary btn-sm" type="submit">{{ t('match.notSame') }}</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="small muted">{{ t('match.whoCan') }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
 {% for f in openFlags %}
 <div class="flag-banner" role="note">
   <div class="flag-banner-text">

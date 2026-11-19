@@ -4,6 +4,7 @@ import { q, tx } from '../db.js';
 import { translator } from '../i18n.js';
 import { notifyBatch } from '../notify.js';
 import { HttpError, applyEdit, canEdit, getTask, lockTask, reviewersOf } from './tasks.js';
+import { flagCloseMatch } from './matches.js';
 
 // Tasks captured through the connector: created straight away from what a
 // person said or typed, with a short Undo. The rules (agreed in the connector
@@ -145,6 +146,7 @@ export async function captureTasks(items, actor, ip, { source = 'text', origin, 
       await audit(db, {
         actorId: actor.id, action: 'task.created', taskId: task.id, details: { title: task.title, batch, via: 'connector', source, ...extra }, ip,
       });
+      const closeMatch = await flagCloseMatch(db, task, actor, ip, { exclude: out.map((o) => o.id), batch, via: 'connector' });
       if (status === 'progress' && ids.length === 0) {
         const heard = missing.filter((m) => m.problem !== 'no_such_label').map((m) => m.heard);
         const note = heard.length
@@ -160,13 +162,17 @@ export async function captureTasks(items, actor, ip, { source = 'text', origin, 
         });
       }
       notices.push({ task, userIds: ids });
-      out.push({ id: task.id, missing });
+      out.push({ id: task.id, missing, closeMatch });
     }
     await notifyBatch(db, { kind: 'assigned', actor, items: notices });
     return out;
   });
   const tasks = [];
-  for (const c of created) tasks.push({ ...summary(await getTask(c.id), origin), missing: c.missing });
+  for (const c of created) {
+    const row = { ...summary(await getTask(c.id), origin), missing: c.missing };
+    if (c.closeMatch) Object.assign(row, { close_match_id: c.closeMatch.match, close_match_flag: c.closeMatch.flag_id });
+    tasks.push(row);
+  }
   return { batch, undo_until: new Date(Date.now() + UNDO_CREATED_SECONDS * 1000).toISOString(), tasks };
 }
 

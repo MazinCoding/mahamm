@@ -1004,6 +1004,27 @@
     "openBoard": "Open in {appName}",
     "yours": "Yours: {count}",
     "waitingForYou": "Waiting for your review: {count}",
-    "shownOf": "Showing the {shown} most urgent of {total} open tasks"
+    "shownOf": "Showing the {shown} most urgent of {total} open tasks",
+    "closeMatch": "Looks like an older task:",
+    "merge": "Merge into #{id}",
+    "notSame": "Not the same",
+    "merged": "Merged #{from} into #{into}",
+    "keptBoth": "Kept both",
+    "closedOn": "Closed"
+  },
+  "match": {
+    "flagNote": "Close match: {n} {title}",
+    "title": "Close match",
+    "intro": "This looks like an older task:",
+    "merge": "Merge into {n}",
+    "notSame": "Not the same",
+    "whoCan": "Whoever added this task, or an admin, can merge it or mark it as not the same.",
+    "merged": "Merged {from} into {into}.",
+    "hint": "It looks like {n}: open {task} to merge them or keep both.",
+    "mergedComment": "Merged {n} into this task: {title}",
+    "labels": "Labels: {names}",
+    "due": "Due date: {date}",
+    "alsoOnIt": "Also on it: {names}",
+    "unmerged": "Undid merging {n} into this task."
   }
 }

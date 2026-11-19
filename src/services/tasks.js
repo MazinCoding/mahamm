@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { audit } from '../audit.js';
 import { notify, notifyBatch } from '../notify.js';
 import { one, q, tx } from '../db.js';
+import { translator } from '../i18n.js';
+import { flagCloseMatch } from './matches.js';
 
 export const OPEN_STATUSES = ['backlog', 'todo', 'progress', 'review'];
 export const CLOSE_REASONS = ['completed', 'notneeded', 'duplicate', 'mistake'];
@@ -271,6 +273,7 @@ export async function createTask(data, actor, ip, file = null) {
     if (assignees.length) await db.query('INSERT INTO task_assignees (task_id, user_id) SELECT $1, unnest($2::uuid[])', [task.id, assignees]);
     if (labels.length) await db.query('INSERT INTO task_labels (task_id, label_id) SELECT $1, unnest($2::int[])', [task.id, labels]);
     await audit(db, { actorId: actor.id, action: 'task.created', taskId: task.id, details: { title: task.title }, ip });
+    task.closeMatch = await flagCloseMatch(db, task, actor, ip);
     if (file) await insertAttachment(db, task.id, file, actor, ip);
     await notify(db, { kind: 'assigned', taskId: task.id, task, actor, userIds: assignees });
     return task;
@@ -592,7 +595,27 @@ export async function undoBatch(batch, actor, ip) {
       }
       if (e.action === 'task.closed') {
         if (!t.closed_at) { changed.push(t.id); continue; }
-        await reopenInside(db, t, actor, ip, t.status, details);
+        // Flags settled by this close come back with the task.
+        const { rows: flags } = await db.query(
+          `UPDATE flags SET resolved_at = NULL, resolved_by = NULL, resolution = NULL
+           WHERE task_id = $1 AND resolution = 'closed' AND id IN (
+             SELECT (details->>'flag_id')::int FROM audit_events
+             WHERE task_id = $1 AND action = 'task.flag_resolved' AND details->>'batch' = $2)
+           RETURNING id`,
+          [t.id, batch],
+        );
+        await reopenInside(db, t, actor, ip, t.status, flags.length ? { ...details, flags_reopened: flags.map((f) => f.id) } : details);
+        // A merge left a comment on the older task; say there that it was undone.
+        if (d.merged && d.duplicate_of) {
+          const { rows: c } = await db.query(
+            'INSERT INTO comments (task_id, author_id, body) VALUES ($1, $2, $3) RETURNING id, body',
+            [d.duplicate_of, actor.id, translator(actor.lang)('match.unmerged', { n: `#${t.id}` })],
+          );
+          await audit(db, {
+            actorId: actor.id, action: 'task.commented', taskId: d.duplicate_of,
+            details: { comment_id: c[0].id, excerpt: c[0].body.slice(0, 120), ...details }, ip,
+          });
+        }
       } else if (t.closed_at) {
         changed.push(t.id);
         continue;

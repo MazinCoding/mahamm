@@ -71,7 +71,7 @@ describe('connector: protocol', () => {
     const list = await rpc(token, 'tools/list', {});
     assert.deepEqual(list.body.result.tools.map((t) => t.name), [
       'get_team', 'my_work', 'search_tasks', 'get_task', 'workload', 'get_activity',
-      'create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'add_comment', 'flag_task', 'undo', 'mark_read',
+      'create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'add_comment', 'merge_tasks', 'flag_task', 'undo', 'mark_read',
       'open_board', 'suggest_tasks', 'take_task', 'set_my_skills', 'admin_change', 'confirm_preview', 'board_snapshot', 'cancel_preview',
     ]);
     const appOnly = list.body.result.tools.filter((t) => t._meta?.ui?.visibility?.length === 1 && t._meta.ui.visibility[0] === 'app');

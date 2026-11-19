@@ -211,6 +211,29 @@ await step('table-quick-add', async () => {
   await Promise.all([page.waitForEvent('load'), page.click('.wip-form button')]);
 });
 
+// A task that nearly repeats an older one is still added, with the older task
+// beside it to merge into; Merge and Undo.
+await step('close-match', async () => {
+  await page.goto(`${base}/table`);
+  for (const title of ['Renew the parking permits for visitors', 'Renew parking permits for visitors']) {
+    await page.fill('#quick-title', title);
+    await Promise.all([page.waitForEvent('load'), page.press('#quick-title', 'Enter')]);
+  }
+  note(`check: close-match flash = ${(await page.locator('.flash').innerText()).trim()}`);
+  const older = await idOf('Renew the parking permits for visitors');
+  const repeat = await idOf('Renew parking permits for visitors');
+  await page.goto(`${base}/tasks/${repeat}`);
+  note(`check: close-match box = ${(await page.locator('.match-box').innerText()).replace(/\s+/g, ' ').trim()}`);
+  await shot(page, '06l-task-close-match');
+  await Promise.all([page.waitForURL(`**/tasks/${older}`), page.click('.match-actions .btn-primary')]);
+  const merged = await one('SELECT close_reason, duplicate_of FROM tasks WHERE id = $1', [repeat]);
+  note(`check: Merge = ${(await page.locator('.flash').innerText()).trim()}; #${repeat} closed as ${merged.close_reason} of #${merged.duplicate_of}`);
+  await shot(page, '06m-task-merged');
+  await Promise.all([page.waitForURL(`**/tasks/${older}`), page.click('.flash-undo button')]);
+  const back = await one('SELECT closed_at FROM tasks WHERE id = $1', [repeat]);
+  note(`check: Undo of the merge = ${(await page.locator('.flash').innerText()).trim()}; #${repeat} open again = ${back.closed_at === null}`);
+});
+
 // Excel import: upload a sheet with gaps and an unknown name.
 const wb = new ExcelJS.Workbook();
 const ws = wb.addWorksheet('Requests');
@@ -546,6 +569,17 @@ await step('connected-apps', async () => {
   await frame.getByRole('button', { name: 'In progress' }).click();
   await frame.locator('button[aria-pressed="true"]', { hasText: 'In progress' }).waitFor({ timeout: 5000 });
   note(`check: card status step saved = ${(await one('SELECT status FROM tasks WHERE id = $1', [detail.structuredContent.id])).status}`);
+
+  // A close match on the card: the older task with Merge and Not the same.
+  const repeat = await tool('create_tasks', { tasks: [{ title: 'Call printer supplier today', assign_to_me: true }] });
+  note(`check: card close match = #${repeat.structuredContent.tasks[0].close_match?.task.id} for #${repeat.structuredContent.tasks[0].id} (earlier #${detail.structuredContent.id})`);
+  frame = await showCard(page, repeat, '34l-card-close-match');
+  await showCard(mobile, repeat, '34m-phone-card-close-match');
+  await frame.getByRole('button', { name: /^Merge into/ }).click();
+  await frame.locator('h2', { hasText: 'Merged' }).waitFor({ timeout: 5000 });
+  await shot(page, '34n-card-merged');
+  const mergedRow = await one('SELECT close_reason, duplicate_of FROM tasks WHERE id = $1', [repeat.structuredContent.tasks[0].id]);
+  note(`check: card Merge closed #${repeat.structuredContent.tasks[0].id} as ${mergedRow.close_reason} of #${mergedRow.duplicate_of}`);
 
   const day = await tool('my_work', {});
   await showCard(page, day, '34d-card-my-day');

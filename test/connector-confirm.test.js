@@ -206,13 +206,16 @@ describe('connector: adding many tasks, labels, descriptions and repeats', () =>
     assert.equal(flag.note, translator('en')('connector.noAssignee'));
   });
 
-  test('a new task like an open one points to it', async () => {
+  test('a new task like an open one points to it: a close match in full, looser ones by number', async () => {
     const me = await person('Hamdan');
     const token = await connectApp(app, me, RETURN);
     const first = await addTask(me, { title: 'Renew the office internet contract' });
+    const looser = await addTask(me, { title: 'Office internet router replacement' });
     const out = await ok(token, 'create_tasks', { tasks: [{ title: 'Renew internet contract for the office' }, { title: 'Water the plants' }] });
-    assert.deepEqual(out.tasks[0].similar.map((t) => t.id), [first]);
+    assert.equal(out.tasks[0].close_match.task.id, first);
+    assert.deepEqual(out.tasks[0].similar.map((t) => t.id), [looser]);
     assert.equal(out.tasks[1].similar, undefined);
+    assert.equal(out.tasks[1].close_match, undefined);
   });
 });
 

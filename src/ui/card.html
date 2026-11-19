@@ -70,6 +70,8 @@
   .chip-task { cursor: pointer; padding: 8px; border-radius: var(--border-radius-md, 8px); background: var(--color-background-primary, #ffffff); border: 1px solid var(--color-border-tertiary, rgba(31, 30, 29, 0.15)); display: flex; flex-direction: column; gap: 6px; }
   .chip-task[aria-expanded="true"] { border-color: var(--color-border-info, #4682d5); }
   .chip-task:focus-visible { outline: 2px solid var(--color-ring-info, #3266ad); outline-offset: 1px; }
+  .match { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; padding: 8px; border-radius: var(--border-radius-md, 8px); background: var(--color-background-warning, #faefd5); }
+  .match .task-title { font-weight: var(--font-weight-medium, 500); }
   .skeleton { height: 64px; border-radius: var(--border-radius-md, 8px); background: var(--color-background-secondary, #f5f4ed); }
 </style>
 </head>
@@ -91,7 +93,7 @@ const STEPS = ['backlog', 'todo', 'in_progress', 'review'];
 const root = document.getElementById('root');
 const state = {
   lang: 'en', tool: null, data: null, meta: {}, error: null, busy: false, note: null, after: null, result: null, batch: null, undoUntil: null,
-  taken: {}, ctx: {}, board: null, tab: 'all', openTask: null,
+  taken: {}, ctx: {}, board: null, tab: 'all', openTask: null, merged: null, kept: {},
 };
 let words = STRINGS.en;
 
@@ -212,9 +214,10 @@ function taskItem(task, extra) {
 function taskList(tasks, limit = 5) {
   const ul = el('ul');
   for (const task of tasks.slice(0, limit)) {
-    let extra = null;
-    if (task.similar && task.similar.length) extra = el('div', 'note warn', t('card.looksLike', { ids: ids(task.similar.map((s) => s.id)) }));
-    ul.append(taskItem(task, extra));
+    const extra = el('div');
+    if (hasMatch(task)) extra.append(matchBlock(task));
+    if (task.similar && task.similar.length) extra.append(el('div', 'note warn', t('card.looksLike', { ids: ids(task.similar.map((s) => s.id)) })));
+    ul.append(taskItem(task, extra.childNodes.length ? extra : null));
   }
   if (tasks.length > limit) ul.append(el('li', 'meta', t('card.andMore', { count: tasks.length - limit })));
   return ul;
@@ -260,6 +263,53 @@ async function tool(name, args) {
   }
 }
 
+// ---------- close matches ----------
+// A task just added (or opened) that nearly repeats an older one: the older
+// task, with Merge and Not the same.
+const hasMatch = (task) => !!task.close_match && !state.kept[task.id] && task.status !== 'done' && state.after !== 'undone';
+function matchBlock(task) {
+  const match = task.close_match.task;
+  const box = el('div', 'match');
+  box.append(el('div', 'note warn', t('card.closeMatch')));
+  box.append(taskItem(match));
+  if (match.closed_on) {
+    const d = bdi(match.closed_on);
+    d.dir = 'ltr';
+    const line = el('div', 'meta', t('card.closedOn') + ' ');
+    line.append(d);
+    box.append(line);
+  }
+  box.append(matchActions(task));
+  return box;
+}
+function matchActions(task) {
+  const actions = el('div', 'actions');
+  actions.append(button(t('card.merge', { id: task.close_match.task.id }), async () => {
+    const done = await tool('merge_tasks', { task_id: task.id });
+    if (done && done.merged) {
+      state.merged = done;
+      tellModel(`The person merged #${done.from} into #${done.into} on the Mahamm card.`);
+    }
+    render();
+  }, { primary: true }));
+  actions.append(button(t('card.notSame'), async () => {
+    const done = await tool('flag_task', { action: 'resolve', task_id: task.id, flag_id: task.close_match.flag_id, resolution: 'dismissed' });
+    if (done && done.resolved) {
+      state.kept[task.id] = true;
+      state.note = { kind: 'good', text: t('card.keptBoth') };
+      tellModel(`The person said #${task.id} is not the same as #${task.close_match.task.id}; both tasks stay.`);
+    }
+    render();
+  }));
+  return actions;
+}
+function viewMerged(card, m) {
+  card.append(el('h2', '', t('card.merged', { from: m.from, into: m.into })));
+  if (m.task) card.append(taskList([m.task], 1));
+  const undo = undoButton(m.batch, m.undo_until);
+  if (undo) { const actions = el('div', 'actions'); actions.append(undo); card.append(actions); }
+}
+
 // ---------- what each tool shows ----------
 function undoButton(batch, until) {
   if (!batch) return null;
@@ -286,6 +336,8 @@ function viewAdded(card, data) {
   const ask = questions(data);
   if (ask) card.append(el('div', 'note warn', ask));
   if (data.warning) card.append(el('div', 'note warn', t('card.overLimit')));
+  // Merge and Not the same stand in for Undo and Team task.
+  if (tasks.length === 1 && hasMatch(tasks[0])) return;
   const actions = el('div', 'actions');
   const undo = undoButton(data.batch, data.undo_until);
   if (undo) actions.append(undo);
@@ -682,6 +734,8 @@ function render() {
     card.append(el('div', 'note bad', t('card.failed', { reason: state.error })));
   } else if (!data) {
     card.append(el('div', 'skeleton'));
+  } else if (state.merged || (state.tool === 'merge_tasks' && data.merged)) {
+    viewMerged(card, state.merged || data);
   } else if (data.waiting_for_confirmation) {
     viewPreview(card, data);
   } else if (state.tool === 'create_tasks') {

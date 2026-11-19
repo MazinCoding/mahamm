@@ -12,6 +12,7 @@ import {
 } from '../services/tasks.js';
 
 const TABLE_COLORS = ['status', 'priority', 'label', 'none'];
+import { mergeIntoMatch, openCloseMatch } from '../services/matches.js';
 import { getWipLimit, inProgressCount, setWipLimit } from '../services/settings.js';
 import { activePeople, allPeopleNames } from '../services/users.js';
 import {
@@ -33,6 +34,11 @@ async function loadTask(req) {
   if (!task) throw new HttpError(404, 'not found');
   return task;
 }
+
+// After adding a task that closely matches an older one: say so, and where to merge them.
+const matchHint = (req, task, text) => (task.closeMatch
+  ? `${text} ${req.t('match.hint', { n: `#${task.closeMatch.match}`, task: `#${task.id}` })}`
+  : text);
 
 const flash = (req, text, type = 'ok', undo = null) => {
   req.session.flash = undo ? { type, text, undo } : { type, text };
@@ -274,7 +280,7 @@ export default function taskRoutes(config) {
     const task = await createTask({
       title: result.data.title, description: '', status: result.data.status, priority: 'med', due_date: '', labels: [], assignees: [],
     }, req.user, req.ip);
-    flash(req, req.t('table.quickAdded', { n: `#${task.id}` }));
+    flash(req, matchHint(req, task, req.t('table.quickAdded', { n: `#${task.id}` })), task.closeMatch ? 'warn' : 'ok');
     req.session.flash.focus = 'quick-add';
     return res.redirect(back);
   });
@@ -292,10 +298,10 @@ export default function taskRoutes(config) {
     const task = await createTask({
       title: result.data.title, description: '', status: 'progress', priority: 'med', due_date: '', labels: [], assignees: [req.user.id],
     }, req.user, req.ip);
-    let text = req.t('home.added', { n: `#${task.id}` });
+    let text = matchHint(req, task, req.t('home.added', { n: `#${task.id}` }));
     const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(config.wipLimit)]);
     if (count > limit) text += ` ${req.t('table.result.overWip', { n: count, limit })}`;
-    flash(req, text, count > limit ? 'warn' : 'ok');
+    flash(req, text, count > limit || task.closeMatch ? 'warn' : 'ok');
     return res.redirect(`/home?added=${task.id}`);
   });
 
@@ -420,11 +426,15 @@ export default function taskRoutes(config) {
       })),
     ].sort((a, b) => new Date(a.at) - new Date(b.at) || a.id.localeCompare(b.id));
     const { task } = detail;
+    // A close match shows as its own box with Merge, not as a plain flag.
+    const found = task.closed_at ? null : await openCloseMatch(task.id);
+    const match = found ? await getTask(found.match_id) : null;
     res.render('tasks/show.njk', {
       task,
       timeline,
       files: detail.files,
-      openFlags: detail.flags.filter((f) => !f.resolved_at),
+      closeMatch: match ? { flagId: found.flag_id, task: match } : null,
+      openFlags: detail.flags.filter((f) => !f.resolved_at && !(match && f.id === found.flag_id)),
       canEdit: canEdit(req.user, task),
       canResolve: canResolveFlags(req.user, task),
       closeOpen: req.query.close === '1',
@@ -596,6 +606,14 @@ export default function taskRoutes(config) {
     res.redirect(`/tasks/${task.id}`);
   });
 
+  // Merge a task into the older task it closely matches (see services/matches.js).
+  r.post('/tasks/:id/merge', requireAuth, writeLimit, async (req, res) => {
+    const id = taskId(req);
+    const out = await mergeIntoMatch(id, req.user, req.ip);
+    flash(req, req.t('match.merged', { from: `#${out.from}`, into: `#${out.into}` }), 'ok', out.batch);
+    res.redirect(`/tasks/${out.into}`);
+  });
+
   r.post('/tasks/:id/flags/:flagId/resolve', requireAuth, writeLimit, async (req, res) => {
     const id = taskId(req);
     const flagId = idParam(req.params.flagId);
@@ -614,7 +632,7 @@ export default function taskRoutes(config) {
 // its filters, Home, or the full list of suggested tasks. Anything else goes back to the table.
 function tableBack(value) {
   const path = safeLocalPath(value, '/table');
-  return /^\/table(\?|$)/.test(path) || /^\/(home|suggested(\?page=\d{1,4})?)$/.test(path) ? path : '/table';
+  return /^\/table(\?|$)/.test(path) || /^\/(home|suggested(\?page=\d{1,4})?|tasks\/\d{1,9})$/.test(path) ? path : '/table';
 }
 
 // "Tasks updated: 3. Bug added. Skipped (you can't edit them): #12, #15."
