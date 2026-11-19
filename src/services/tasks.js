@@ -595,8 +595,9 @@ export async function undoBatch(batch, actor, ip) {
       }
       if (e.action === 'task.closed') {
         if (!t.closed_at) { changed.push(t.id); continue; }
-        // Flags settled by this close come back with the task.
-        const { rows: flags } = await db.query(
+        // Undoing a merge brings back the flags it settled, so the close match
+        // can be merged or dismissed again. (Other closes leave flags settled.)
+        const { rows: flags } = !d.merged ? { rows: [] } : await db.query(
           `UPDATE flags SET resolved_at = NULL, resolved_by = NULL, resolution = NULL
            WHERE task_id = $1 AND resolution = 'closed' AND id IN (
              SELECT (details->>'flag_id')::int FROM audit_events
