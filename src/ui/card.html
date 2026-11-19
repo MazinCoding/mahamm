@@ -54,6 +54,22 @@
   .carousel { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 2px; }
   .pick { flex: 0 0 min(280px, 86%); scroll-snap-align: start; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--border-radius-lg, 10px); border: 1px solid var(--color-border-tertiary, rgba(31, 30, 29, 0.15)); }
   .pick .grow { flex: 1 1 auto; }
+  html.full, html.full body { height: 100%; }
+  html.full .card { min-height: 100vh; box-sizing: border-box; }
+  .board-head { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tabs { display: flex; gap: 4px; flex: 1 1 260px; }
+  .tabs button { flex: 1 1 0; min-width: 0; padding: 0 6px; font-size: var(--font-text-sm-size, 14px); }
+  .tabs button[aria-pressed="true"] { background: var(--color-background-info, #d6e4f6); color: var(--color-text-info, #3266ad); border-color: var(--color-border-info, #4682d5); }
+  .board-head .small { flex: 0 1 auto; padding: 0 12px; font-size: var(--font-text-sm-size, 14px); }
+  .columns { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; align-items: flex-start; padding-bottom: 4px; }
+  .column { flex: 0 0 min(300px, 86vw); scroll-snap-align: start; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: var(--border-radius-lg, 10px); background: var(--color-background-secondary, #f5f4ed); max-height: calc(100vh - 150px); overflow-y: auto; }
+  .column.drop { outline: 2px dashed var(--color-border-info, #4682d5); }
+  .column h3 { margin: 0 2px 2px; display: flex; justify-content: space-between; gap: 6px; font-size: var(--font-text-sm-size, 14px); font-weight: var(--font-weight-semibold, 600); }
+  .column h3 .over { color: var(--color-text-warning, #5a4815); }
+  .column ul { gap: 6px; }
+  .chip-task { cursor: pointer; padding: 8px; border-radius: var(--border-radius-md, 8px); background: var(--color-background-primary, #ffffff); border: 1px solid var(--color-border-tertiary, rgba(31, 30, 29, 0.15)); display: flex; flex-direction: column; gap: 6px; }
+  .chip-task[aria-expanded="true"] { border-color: var(--color-border-info, #4682d5); }
+  .chip-task:focus-visible { outline: 2px solid var(--color-ring-info, #3266ad); outline-offset: 1px; }
   .skeleton { height: 64px; border-radius: var(--border-radius-md, 8px); background: var(--color-background-secondary, #f5f4ed); }
 </style>
 </head>
@@ -73,7 +89,10 @@ const REASON_KEY = { completed: 'completed', not_needed: 'notneeded', duplicate:
 const STEPS = ['backlog', 'todo', 'in_progress', 'review'];
 
 const root = document.getElementById('root');
-const state = { lang: 'en', tool: null, data: null, meta: {}, error: null, busy: false, note: null, after: null, result: null, batch: null, undoUntil: null, taken: {} };
+const state = {
+  lang: 'en', tool: null, data: null, meta: {}, error: null, busy: false, note: null, after: null, result: null, batch: null, undoUntil: null,
+  taken: {}, ctx: {}, board: null, tab: 'all', openTask: null,
+};
 let words = STRINGS.en;
 
 // ---------- messages with the app ----------
@@ -109,6 +128,8 @@ window.addEventListener('message', (event) => {
 
 let fontsAdded = false;
 function applyContext(ctx) {
+  for (const k of ['displayMode', 'availableDisplayModes', 'safeAreaInsets']) if (ctx[k] !== undefined) state.ctx[k] = ctx[k];
+  if (ctx.displayMode !== undefined && state.data) render();
   const vars = ctx.styles && ctx.styles.variables;
   if (vars) for (const [k, v] of Object.entries(vars)) if (k.startsWith('--') && typeof v === 'string') document.documentElement.style.setProperty(k, v);
   const fonts = ctx.styles && ctx.styles.css && ctx.styles.css.fonts;
@@ -127,7 +148,7 @@ async function start() {
     const init = await request('ui/initialize', {
       protocolVersion: '2026-01-26',
       clientInfo: { name: 'mahamm-card', version: '1.0.0' },
-      appCapabilities: { availableDisplayModes: ['inline'] },
+      appCapabilities: { availableDisplayModes: ['inline', 'fullscreen'] },
     });
     applyContext((init && init.hostContext) || {});
   } catch { /* the app may not answer; show results anyway */ }
@@ -442,6 +463,129 @@ function viewSuggest(card, data) {
   card.append(row);
 }
 
+// ---------- the board ----------
+const isFull = () => state.ctx.displayMode === 'fullscreen';
+const canFull = () => (state.ctx.availableDisplayModes || []).includes('fullscreen');
+
+async function displayMode(mode) {
+  try {
+    const answer = await request('ui/request-display-mode', { mode });
+    state.ctx.displayMode = (answer && answer.mode) || state.ctx.displayMode;
+  } catch { /* the app keeps the current mode */ }
+  render();
+}
+async function refreshBoard() {
+  const snapshot = await tool('board_snapshot', {});
+  if (snapshot) state.board = snapshot;
+  render();
+}
+async function boardAction(name, args, said) {
+  const done = await tool(name, args);
+  if (done && done.changed === false && done.needs_credit) state.note = { kind: 'warn', text: t('card.doneNeedsCredit') };
+  else if (done) tellModel(said);
+  const keep = state.note;
+  await refreshBoard();
+  if (keep && !state.note) { state.note = keep; render(); }
+}
+
+function viewBoardInline(card) {
+  const b = state.board || {};
+  const c = b.counts || state.data || {};
+  card.append(el('h2', '', t('card.board')));
+  const stats = el('div', 'stats');
+  const stat = (n, label) => { const box = el('div', 'stat'); box.append(el('b', '', String(n)), el('span', '', label)); stats.append(box); };
+  stat(c.backlog || 0, statusText('backlog'));
+  stat(c.todo || 0, statusText('todo'));
+  stat(`${c.in_progress || 0}/${b.in_progress_limit || '–'}`, statusText('in_progress'));
+  stat(c.review || 0, statusText('review'));
+  card.append(stats);
+  if (b.mine) card.append(el('div', 'meta', `${t('card.yours', { count: b.mine.length })} · ${t('card.waitingForYou', { count: b.review.length })}`));
+  const actions = el('div', 'actions');
+  if (canFull() && b.tasks) actions.append(button(t('card.fullScreen'), () => displayMode('fullscreen'), { primary: true }));
+  actions.append(button(t('card.openBoard', { appName: state.meta.app_name || 'Mahamm' }), () => openMahamm('/board')));
+  card.append(actions);
+}
+
+function boardItem(task, mine) {
+  const open = state.openTask === task.id;
+  const item = taskItem(task);
+  item.className = 'chip-task';
+  item.tabIndex = 0;
+  item.setAttribute('role', 'button');
+  item.setAttribute('aria-expanded', String(open));
+  const toggle = () => { state.openTask = open ? null : task.id; render(); };
+  item.addEventListener('click', (e) => { if (!e.target.closest('button')) toggle(); });
+  item.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === item) { e.preventDefault(); toggle(); } });
+  if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+    item.draggable = true;
+    item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', String(task.id)); e.dataTransfer.effectAllowed = 'move'; });
+  }
+  if (open) {
+    const steps = el('div', 'steps');
+    steps.setAttribute('role', 'group');
+    steps.setAttribute('aria-label', t('card.status'));
+    for (const s of STEPS) {
+      const b = button(statusText(s), () => boardAction('update_tasks', { task_ids: [task.id], status: s }, `On the board, the person moved #${task.id} to ${s}.`), { disabled: task.status === s });
+      b.setAttribute('aria-pressed', String(task.status === s));
+      steps.append(b);
+    }
+    item.append(steps);
+    const actions = el('div', 'actions');
+    if (mine) actions.append(button(t('card.done'), () => boardAction('close_tasks', { task_ids: [task.id], reason: 'completed' }, `On the board, the person marked #${task.id} done.`), { primary: true }));
+    else actions.append(button(t('card.join'), () => boardAction('join_task', { task_id: task.id }, `On the board, the person joined #${task.id}.`), { primary: true }));
+    actions.append(button(t('card.openTask'), () => openMahamm(`/tasks/${task.id}`)));
+    item.append(actions);
+  }
+  return item;
+}
+
+function viewBoard(card) {
+  const b = state.board;
+  const head = el('div', 'board-head');
+  const tabs = el('div', 'tabs');
+  tabs.setAttribute('role', 'group');
+  for (const [key, label] of [['all', t('card.tabAll')], ['mine', t('card.tabMine')], ['review', t('card.tabReview')]]) {
+    const tab = button(label, () => { state.tab = key; state.openTask = null; render(); });
+    tab.setAttribute('aria-pressed', String(state.tab === key));
+    tabs.append(tab);
+  }
+  head.append(tabs);
+  const refresh = button(t('card.refresh'), refreshBoard);
+  refresh.classList.add('small');
+  head.append(refresh);
+  card.append(head);
+  const pick = state.tab === 'mine' ? new Set(b.mine) : state.tab === 'review' ? new Set(b.review) : null;
+  const tasks = b.tasks.filter((x) => !pick || pick.has(x.id));
+  const mine = new Set(b.mine);
+  const columns = el('div', 'columns');
+  for (const s of STEPS) {
+    const col = el('section', 'column');
+    col.dataset.status = s;
+    const inCol = tasks.filter((x) => x.status === s);
+    const title = el('h3');
+    title.append(el('span', '', statusText(s)));
+    const count = s === 'in_progress' ? `${b.counts.in_progress}/${b.in_progress_limit}` : String(pick ? inCol.length : b.counts[s]);
+    title.append(el('span', s === 'in_progress' && b.counts.in_progress > b.in_progress_limit ? 'over' : 'meta', count));
+    col.append(title);
+    const ul = el('ul');
+    for (const task of inCol) ul.append(boardItem(task, mine.has(task.id)));
+    if (!inCol.length) ul.append(el('li', 'meta', t('card.emptyColumn')));
+    col.append(ul);
+    col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drop'); });
+    col.addEventListener('dragleave', () => col.classList.remove('drop'));
+    col.addEventListener('drop', (e) => {
+      e.preventDefault();
+      col.classList.remove('drop');
+      const id = Number(e.dataTransfer.getData('text/plain'));
+      const task = b.tasks.find((x) => x.id === id);
+      if (task && task.status !== s) boardAction('update_tasks', { task_ids: [id], status: s }, `On the board, the person moved #${id} to ${s}.`);
+    });
+    columns.append(col);
+  }
+  card.append(columns);
+  if (b.shown < Object.values(b.counts).reduce((a, n) => a + n, 0)) card.append(el('div', 'meta', t('card.shownOf', { shown: b.shown, total: Object.values(b.counts).reduce((a, n) => a + n, 0) })));
+}
+
 function viewMyDay(card, data) {
   card.append(el('h2', '', t('card.myDay')));
   const stats = el('div', 'stats');
@@ -522,6 +666,7 @@ function show(result) {
   document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
   state.error = result.isError ? textOf(result) : null;
   state.data = result.structuredContent || null;
+  state.board = (result._meta && result._meta['mahamm/board']) || state.board;
   render();
 }
 
@@ -545,13 +690,28 @@ function render() {
     viewMyDay(card, data);
   } else if (state.tool === 'suggest_tasks') {
     viewSuggest(card, data);
+  } else if (state.tool === 'open_board') {
+    if (isFull() && state.board && state.board.tasks) viewBoard(card); else viewBoardInline(card);
   } else if (state.tool === 'get_task') {
     viewTask(card, data);
   } else {
     viewChanged(card, data);
   }
   if (state.note) card.append(el('div', `note ${state.note.kind}`, state.note.text));
+  const full = isFull();
+  document.documentElement.classList.toggle('full', full);
+  const inset = (full && state.ctx.safeAreaInsets) || null;
+  if (inset) card.style.padding = `${12 + (inset.top || 0)}px ${14 + (inset.right || 0)}px ${14 + (inset.bottom || 0)}px ${14 + (inset.left || 0)}px`;
+  // Keep where the person had scrolled the board to.
+  const oldColumns = document.querySelector('.columns');
+  const across = oldColumns ? oldColumns.scrollLeft : 0;
+  const down = [...document.querySelectorAll('.column')].map((c) => c.scrollTop);
   document.getElementById('root').replaceWith(card);
+  const newColumns = document.querySelector('.columns');
+  if (newColumns) {
+    newColumns.scrollLeft = across;
+    document.querySelectorAll('.column').forEach((c, i) => { c.scrollTop = down[i] || 0; });
+  }
   reportSize();
 }
 
