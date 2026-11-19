@@ -119,6 +119,7 @@
       <h2>{{ t('field.assignees') }}</h2>
       {% for a in task.assignees %}<div class="person">{{ m.avatar(a) }}<span>{{ a.name }}</span></div>{% else %}<p class="muted"><em>{{ t('task.noOne') }}</em></p>{% endfor %}
       {% if task.team_task %}<p><span class="chip c-blue">{{ t('task.teamTask') }}</span></p>{% endif %}
+      {% if task.reviewer_name %}<p class="small"><span class="muted">{{ t('field.reviewer') }}:</span> <bdi class="task-reviewer">{{ task.reviewer_name }}</bdi></p>{% endif %}
     </section>
     <section class="side">
       <h2>{{ t('field.labels') }}</h2>

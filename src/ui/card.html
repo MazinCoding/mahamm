@@ -51,6 +51,9 @@
   button.primary { background: var(--color-background-inverse, #141413); color: var(--color-text-inverse, #ffffff); border-color: transparent; }
   button:disabled { opacity: 0.5; cursor: default; }
   button:focus-visible { outline: 2px solid var(--color-ring-info, #3266ad); outline-offset: 2px; }
+  .carousel { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 2px; }
+  .pick { flex: 0 0 min(280px, 86%); scroll-snap-align: start; display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: var(--border-radius-lg, 10px); border: 1px solid var(--color-border-tertiary, rgba(31, 30, 29, 0.15)); }
+  .pick .grow { flex: 1 1 auto; }
   .skeleton { height: 64px; border-radius: var(--border-radius-md, 8px); background: var(--color-background-secondary, #f5f4ed); }
 </style>
 </head>
@@ -70,7 +73,7 @@ const REASON_KEY = { completed: 'completed', not_needed: 'notneeded', duplicate:
 const STEPS = ['backlog', 'todo', 'in_progress', 'review'];
 
 const root = document.getElementById('root');
-const state = { lang: 'en', tool: null, data: null, meta: {}, error: null, busy: false, note: null, after: null, result: null, batch: null, undoUntil: null };
+const state = { lang: 'en', tool: null, data: null, meta: {}, error: null, busy: false, note: null, after: null, result: null, batch: null, undoUntil: null, taken: {} };
 let words = STRINGS.en;
 
 // ---------- messages with the app ----------
@@ -278,7 +281,8 @@ function viewAdded(card, data) {
 
 function viewChanged(card, data) {
   if (data.task) {
-    const head = data.joined ? t('card.joined', { id: data.task.id }) : t('card.alreadyOn', { id: data.task.id });
+    let head = data.joined ? t('card.joined', { id: data.task.id }) : t('card.alreadyOn', { id: data.task.id });
+    if (data.taken) head = t('card.taken');
     card.append(el('h2', '', head));
     card.append(taskList([data.task]));
   } else if (data.changed === false) {
@@ -382,6 +386,62 @@ function viewPreview(card, data) {
   card.append(actions);
 }
 
+function whyLine(task) {
+  const w = task.why || {};
+  const bits = [];
+  if (w.skills && w.skills.length) bits.push(t('card.whySkills', { items: list(w.skills) }));
+  if (w.like_work_you_finished && w.like_work_you_finished.length) bits.push(t('card.whyLabels', { items: list(w.like_work_you_finished) }));
+  if (w.overdue) bits.push(t('card.whyOverdue'));
+  else if (w.due_soon && task.due_date) bits.push(t('card.whyDueSoon', { date: task.due_date }));
+  if (w.team_task) bits.push(t('card.whyTeam'));
+  if (w.others_on_it && w.others_on_it.length) bits.push(t('card.whyOthers', { names: list(w.others_on_it) }));
+  if (w.waiting_days > 14) bits.push(t('card.whyWaiting', { days: w.waiting_days }));
+  return bits.join(' · ');
+}
+
+// Up to three picks side by side, each with one button: Take it, then Undo.
+function viewSuggest(card, data) {
+  card.append(el('h2', '', t('card.suggestTitle')));
+  if (!data.skills_saved) card.append(el('div', 'note', t('card.noSkills')));
+  const picks = (data.candidates || []).slice(0, 3);
+  if (!picks.length) { card.append(el('div', 'meta', t('card.noSuggestions'))); return; }
+  const row = el('div', 'carousel');
+  for (const task of picks) {
+    const item = el('div', 'pick');
+    item.append(taskList([task], 1));
+    const why = whyLine(task);
+    if (why) item.append(el('div', 'note good', why));
+    if ((task.unknown || []).includes('description')) item.append(el('div', 'meta', t('card.unknownDescription')));
+    item.append(el('div', 'grow'));
+    const taken = state.taken[task.id];
+    if (taken === 'undone') {
+      item.append(button(t('card.undone'), () => {}, { disabled: true }));
+    } else if (taken) {
+      item.append(el('div', 'note good', t('card.taken')));
+      item.append(button(t('card.undo'), async () => {
+        const done = await tool('undo', { batch: taken.batch });
+        if (done) {
+          state.taken[task.id] = 'undone';
+          tellModel(`The person undid taking task #${task.id} on the Mahamm card.`);
+        }
+        render();
+      }));
+    } else {
+      item.append(button(t('card.take'), async () => {
+        const done = await tool('take_task', { task_id: task.id });
+        if (done && done.taken) {
+          state.taken[task.id] = done;
+          Object.assign(task, done.task);
+          tellModel(`The person took task #${task.id} from the Mahamm card: they are on it and it is In progress.`);
+        }
+        render();
+      }, { primary: true }));
+    }
+    row.append(item);
+  }
+  card.append(row);
+}
+
 function viewMyDay(card, data) {
   card.append(el('h2', '', t('card.myDay')));
   const stats = el('div', 'stats');
@@ -483,6 +543,8 @@ function render() {
     viewAdded(card, data);
   } else if (state.tool === 'my_work') {
     viewMyDay(card, data);
+  } else if (state.tool === 'suggest_tasks') {
+    viewSuggest(card, data);
   } else if (state.tool === 'get_task') {
     viewTask(card, data);
   } else {

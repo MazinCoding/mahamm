@@ -17,6 +17,11 @@
         </select>
       </div>
     </div>
+    <div class="field">
+      <label for="skills">{{ t('settings.skills') }} <span class="muted">({{ t('common.optional') }})</span></label>
+      <input id="skills" class="input" name="skills" value="{{ me.skills | join(t('common.listSep')) }}" maxlength="900" dir="auto">
+      <p class="hint">{{ t('settings.skillsHint') }}</p>
+    </div>
     <label class="check-inline"><input type="checkbox" name="email_notifications" value="on" {% if me.email_notifications %}checked{% endif %}> {{ t('settings.emailMe') }}</label>
     <div class="form-actions"><button class="btn btn-primary" type="submit">{{ t('common.save') }}</button></div>
   </form>

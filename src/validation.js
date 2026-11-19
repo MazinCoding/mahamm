@@ -36,6 +36,8 @@ export const newTaskSchema = z.object({ ...taskFields, status: z.enum(['backlog'
 export const editTaskSchema = z.object({
   ...taskFields,
   team_task: z.preprocess((v) => v === 'on' || v === true, z.boolean()),
+  // '' means nobody; left out keeps the current reviewer.
+  reviewer_id: z.preprocess((v) => (v === '' ? null : v), z.string().uuid().nullable()).optional(),
 });
 
 export const moveSchema = z.object({ status: z.enum(['backlog', 'todo', 'progress', 'review']) });
@@ -134,10 +136,14 @@ export const labelSchema = z.object({
   color: z.enum(['red', 'blue', 'teal', 'amber', 'purple', 'gray', 'green', 'pink', 'yellow']),
 });
 
+// Skills are typed as one line, separated by commas (English or Arabic).
+export const skillList = z.array(z.preprocess(cleanLine, z.string().min(1).max(40))).max(20)
+  .transform((list) => list.filter((s, i) => list.findIndex((x) => x.toLowerCase() === s.toLowerCase()) === i));
 export const profileSchema = z.object({
   name: nameField,
   lang: z.enum(['en', 'ar']),
   email_notifications: z.preprocess((v) => v === 'on' || v === 'true', z.boolean()),
+  skills: z.preprocess((v) => String(v ?? '').split(/[,،\n]/).map(cleanLine).filter(Boolean), skillList),
 });
 
 // Connected apps (OAuth). These values come from outside apps, so every field is bounded.
@@ -215,6 +221,7 @@ export const connectorSearchSchema = z.object({
   person: connectorName.optional(),
   unassigned: z.boolean().default(false),
   creator: connectorName.optional(),
+  reviewer: connectorName.optional(),
   label: connectorLabel.optional(),
   priority: z.array(connectorPriority).max(3).default([]),
   due: z.enum(['overdue', 'today', 'this_week', 'none']).optional(),
@@ -247,6 +254,7 @@ export const connectorUpdateManySchema = z.object({
   title: z.preprocess(cleanLine, z.string().min(1).max(200)).optional(),
   description: z.preprocess(clean, z.string().max(10000)).optional(),
   team_task: z.boolean().optional(),
+  reviewer: z.union([connectorName, z.null()]).optional(),
 }).refine((d) => (d.title === undefined && d.description === undefined) || d.task_ids.length === 1, {
   message: 'title and description can only be changed on one task at a time', path: ['title'],
 });
@@ -287,6 +295,8 @@ export const connectorAdminSchema = z.discriminatedUnion('action', [
 ]);
 export const connectorConfirmSchema = z.object({ preview_id: z.string().uuid(), secret: z.string().min(20).max(100) });
 export const connectorCancelSchema = z.object({ preview_id: z.string().uuid() });
+export const connectorSuggestSchema = z.object({ limit: z.number().int().min(1).max(10).default(5) });
+export const connectorSkillsSchema = z.object({ skills: skillList, mode: z.enum(['add', 'remove', 'replace']).default('add') });
 
 export const idParam = (value) => (/^\d{1,9}$/.test(String(value)) ? Number(value) : null);
 export const uuidParam = (value) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value)) ? String(value) : null);

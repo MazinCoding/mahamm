@@ -77,7 +77,8 @@
     "assignees": "Assignees",
     "labels": "Labels",
     "files": "Attachments",
-    "attachment": "Attachment"
+    "attachment": "Attachment",
+    "reviewer": "Reviewer"
   },
   "form": {
     "err": {
@@ -269,7 +270,9 @@
     "noLabels": "No labels",
     "noDue": "No due date",
     "teamTask": "Team task",
-    "teamTaskHint": "Team tasks show first in Suggested, among tasks of the same priority, so others can join them."
+    "teamTaskHint": "Team tasks show first in Suggested, among tasks of the same priority, so others can join them.",
+    "noReviewer": "Nobody: the creator checks it",
+    "reviewerHint": "Told when this task moves to Review."
   },
   "comment": {
     "label": "Add a comment",
@@ -622,7 +625,9 @@
     "confirmDisconnectAll": "Disconnect every app? Each one will need to be approved again.",
     "noApps": "No connected apps.",
     "appDisconnected": "App disconnected.",
-    "appsDisconnected": "All apps disconnected."
+    "appsDisconnected": "All apps disconnected.",
+    "skills": "Skills",
+    "skillsHint": "In your own words, separated by commas. Used to suggest tasks that fit you."
   },
   "twoFactor": {
     "title": "Set up two-step verification",
@@ -975,6 +980,19 @@
     "join": "Join",
     "done": "Done",
     "doneNeedsCredit": "Nobody is on this task yet: say in the chat who did it.",
-    "failed": "That didn't work: {reason}"
+    "failed": "That didn't work: {reason}",
+    "suggestTitle": "Tasks you could take",
+    "take": "Take it",
+    "taken": "Yours now, in progress",
+    "whySkills": "Fits your skills: {items}",
+    "whyLabels": "Like work you finished: {items}",
+    "whyTeam": "Team task",
+    "whyOthers": "With {names}",
+    "whyWaiting": "Waiting {days} days",
+    "whyOverdue": "Overdue",
+    "whyDueSoon": "Due {date}",
+    "unknownDescription": "No description yet",
+    "noSuggestions": "Nothing open that you aren’t already on.",
+    "noSkills": "No skills saved yet: say them in the chat, or add them in Settings."
   }
 }

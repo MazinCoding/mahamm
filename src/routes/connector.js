@@ -3,16 +3,16 @@ import { SCOPES, verifyAccessToken } from '../oauth.js';
 import { enforce } from '../ratelimit.js';
 import { updateCaptured } from '../services/capture.js';
 import {
-  MAX_ADD, MAX_DIRECT, activity, addTasks, closeTasks, comment, flag, joinOne, markRead, myWork, searchTasks, taskInFull,
-  teamOverview, undoAny, updateTasks, workload,
+  MAX_ADD, MAX_DIRECT, activity, addTasks, closeTasks, comment, flag, joinOne, markRead, myWork, searchTasks, setSkills, suggest,
+  takeTask, taskInFull, teamOverview, undoAny, updateTasks, workload,
 } from '../services/connector.js';
 import { PREVIEW_MINUTES, adminPreview, cancelPreview, confirmPreview } from '../services/previews.js';
 import { HttpError } from '../services/tasks.js';
 import { CARD_URI, cardResource } from '../ui/card.js';
 import {
   captureSchema, connectorActivitySchema, connectorAdminSchema, connectorCancelSchema, connectorCloseSchema, connectorCommentSchema,
-  connectorConfirmSchema, connectorFlagSchema, connectorReadSchema, connectorSearchSchema, connectorTaskSchema, connectorUndoSchema,
-  connectorUpdateManySchema, connectorUpdateSchema, parse,
+  connectorConfirmSchema, connectorFlagSchema, connectorReadSchema, connectorSearchSchema, connectorSkillsSchema, connectorSuggestSchema,
+  connectorTaskSchema, connectorUndoSchema, connectorUpdateManySchema, connectorUpdateSchema, parse,
 } from '../validation.js';
 
 // The connector: a small JSON-RPC 2.0 endpoint (Streamable HTTP, stateless,
@@ -38,6 +38,7 @@ class RpcError extends Error {
 
 const INSTRUCTIONS = `Mahamm is the team's task board, in English and Arabic. Statuses: backlog, todo, in_progress, review, done.
 Capture work as tasks the moment someone mentions it, in a voice note or plain words: add them straight away with create_tasks and never ask for confirmation first. Capturing the task quickly matters more than complete details.
+When someone asks what they could do next, call suggest_tasks: explain the first three candidates with their reasons and anything unknown, then offer to take one (take_task joins them and moves it to In progress). Use only the person's saved skills and finished work; never guess what someone is good at from their name or role, and if no skills are saved, say so and offer to save some with set_my_skills.
 Read before you answer: my_work for "what's on my plate", search_tasks to find tasks, get_task for one task's details and history, workload for who is busy or has room, get_activity for what happened (stand-ups, weekly reports, "who closed it").
 Change tasks with update_tasks (move, edit, reopen), close_tasks (done, with credit to whoever did the work), join_task, add_comment and flag_task. Every change returns a batch id that undo takes back: one minute for added tasks, ten minutes for other changes. After a change, say briefly what changed and that it can be undone.
 Big changes are not made straight away: more than ${MAX_DIRECT} tasks at once, taking someone else off a task, more than ${MAX_ADD} new tasks at once, and admin changes come back as a preview waiting for the person to confirm. Tell them what it will do and that they confirm it on the card or at the link; you can't confirm it for them.
@@ -79,7 +80,7 @@ const TOOLS = [
       'Find tasks with any mix of filters; open tasks only unless status includes "done". Returns 25 compact rows a page with the total.',
       '- words: matches titles and descriptions containing ANY of the words. Tasks may be written in English or Arabic, so include both (for example ["printer", "طابعة"]).',
       '- person: someone assigned to or credited on the task ("me" for the person you act for). unassigned: only tasks with nobody on them.',
-      '- creator, label (English or Arabic name), priority, due (overdue, today, this_week, none), due_before, team_task, flagged.',
+      '- creator, reviewer, label (English or Arabic name), priority, due (overdue, today, this_week, none), due_before, team_task, flagged.',
       '- not_updated_for_days: tasks with no change for that many days (stuck work).',
       '- closed_within_days: how far back "done" looks (default 30).',
       'A name or label that matches nothing is returned under "missing"; ask about it rather than guessing.',
@@ -90,6 +91,7 @@ const TOOLS = [
       person: { type: 'string', maxLength: 100 },
       unassigned: { type: 'boolean' },
       creator: { type: 'string', maxLength: 100 },
+      reviewer: { type: 'string', maxLength: 100 },
       label: { type: 'string', maxLength: 40 },
       priority: { type: 'array', items: priority, maxItems: 3 },
       due: { type: 'string', enum: ['overdue', 'today', 'this_week', 'none'] },
@@ -186,7 +188,8 @@ const TOOLS = [
     title: 'Change tasks',
     description: [
       'Change one or more tasks in one go (they share one Undo for ten minutes).',
-      '- status: move between backlog, todo, in_progress and review. Anyone can change status. A status on a closed task reopens it. Moving to review tells the task\'s creator.',
+      '- status: move between backlog, todo, in_progress and review. Anyone can change status. A status on a closed task reopens it. Moving to review tells the reviewer, or the task\'s creator when there is none.',
+      '- reviewer: who checks it in Review (someone with an account; "me" for the person you act for; null for nobody). Set it with status review for "send it to Maryam for review". To approve, close it as completed; to send it back, move it to in_progress and add a comment.',
       '- priority, due_date (null clears it), team_task, add_assignees, remove_assignees, add_labels, remove_labels (label names in English or Arabic): need the person to be the task\'s creator, an assignee or an admin; tasks they can\'t edit are listed under skipped.not_allowed.',
       '- title and description: one task at a time.',
       `Up to ${MAX_DIRECT} tasks at once are changed straight away. More than that, or taking someone other than the person themselves off a task, comes back as a preview for the person to confirm.`,
@@ -205,6 +208,7 @@ const TOOLS = [
       title: { type: 'string', minLength: 1, maxLength: 200 },
       description: { type: 'string', maxLength: 10000 },
       team_task: { type: 'boolean' },
+      reviewer: { type: ['string', 'null'], maxLength: 100 },
     }, ['task_ids']),
     annotations: WRITE,
   },
@@ -277,6 +281,30 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
   {
+    name: 'suggest_tasks',
+    title: 'What can I do now?',
+    description: 'Open tasks the person is not on yet, ranked by how well they fit them: priority, their saved skills (matched in titles, descriptions and labels), labels of work they finished in the last 90 days, team tasks they could join, due dates and how long tasks have waited. Each candidate comes with "why" (the reasons) and "unknown" (missing details such as no due date). Also returns their skills (skills_saved is false when there are none), their recent labels and how much they have in progress against the team\'s limit. The card shows the first three.',
+    inputSchema: object({ limit: { type: 'integer', minimum: 1, maximum: 10 } }),
+    annotations: READ,
+  },
+  {
+    name: 'take_task',
+    title: 'Take a task',
+    description: 'The person takes a task: they join it and it moves to In progress, in one change with one Undo (ten minutes). Use it after they say yes to a suggestion. Anyone can take any open task.',
+    inputSchema: object({ task_id: id }, ['task_id']),
+    annotations: WRITE,
+  },
+  {
+    name: 'set_my_skills',
+    title: 'Save my skills',
+    description: 'Save what the person says they are good at, in their own words (up to 20, each up to 40 characters): mode add (default) keeps the ones already saved, remove takes some away, replace sets the list. Only save skills the person stated themselves. They can also edit them in Settings.',
+    inputSchema: object({
+      skills: { type: 'array', items: { type: 'string', maxLength: 40 }, maxItems: 20 },
+      mode: { type: 'string', enum: ['add', 'remove', 'replace'] },
+    }, ['skills']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  {
     name: 'admin_change',
     title: 'Admin change',
     description: 'For admins only: add a person who has no account yet (so tasks can be assigned and credited to them), or set the team\'s in-progress limit (1 to 50). Always comes back as a preview for the admin to confirm. Invites, roles and accounts stay on the website.',
@@ -306,7 +334,7 @@ const TOOLS = [
 ];
 
 // Tools whose results come with Mahamm's card, for apps that show cards.
-const CARD_TOOLS = new Set(['create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'my_work', 'get_task', 'admin_change']);
+const CARD_TOOLS = new Set(['create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'my_work', 'get_task', 'admin_change', 'suggest_tasks', 'take_task']);
 for (const tool of TOOLS) {
   if (CARD_TOOLS.has(tool.name)) tool._meta = { ...tool._meta, ui: { ...tool._meta?.ui, resourceUri: CARD_URI } };
 }
@@ -411,6 +439,9 @@ async function runTool(config, name, args, ctx) {
     case 'add_comment': return run(connectorCommentSchema, (d) => comment(d, user, ip, opts));
     case 'flag_task': return run(connectorFlagSchema, (d) => flag(d, user, ip));
     case 'mark_read': return run(connectorReadSchema, (d) => markRead(d, user));
+    case 'suggest_tasks': return run(connectorSuggestSchema, (d) => suggest(d, user, opts));
+    case 'take_task': return run(connectorTaskSchema, (d) => takeTask(d.task_id, user, ip, opts));
+    case 'set_my_skills': return run(connectorSkillsSchema, (d) => setSkills(d, user));
     case 'admin_change': return run(connectorAdminSchema, (d) => adminPreview(d, user, opts));
     case 'confirm_preview': return run(connectorConfirmSchema, (d) => confirmPreview(d.preview_id, user, ip, opts, { secret: d.secret }));
     case 'cancel_preview': return run(connectorCancelSchema, (d) => cancelPreview(d.preview_id, user));

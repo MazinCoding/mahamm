@@ -80,6 +80,7 @@ function sentence(ev, t, { names = {}, labels = {} } = {}) {
         if (field === 'title') return t('ev.fieldChange', { field: t('field.title'), from: clip(c.from, 60), to: clip(c.to, 60) });
         if (field === 'description') return t('ev.fieldDescription');
         if (field === 'team_task') return c.to ? t('ev.teamTaskOn') : t('ev.teamTaskOff');
+        if (field === 'reviewer') return t('ev.fieldChange', { field: t('field.reviewer'), from: c.from ? who(c.from) : t('common.none'), to: c.to ? who(c.to) : t('common.none') });
         return field;
       });
       return `${t('ev.edited')}: ${parts.join('; ')}${undo}`;

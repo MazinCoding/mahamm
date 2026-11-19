@@ -58,6 +58,15 @@
   </fieldset>
   {% if mode == 'edit' %}
   <div class="field">
+    <label for="reviewer_id">{{ t('field.reviewer') }} <span class="muted">({{ t('common.optional') }})</span></label>
+    <select id="reviewer_id" class="input" name="reviewer_id">
+      <option value="">{{ t('task.noReviewer') }}</option>
+      {% for p in reviewers %}<option value="{{ p.id }}" {% if p.id == values.reviewer_id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <p class="hint">{{ t('task.reviewerHint') }}</p>
+  </div>
+  <div class="field">
     <label class="check-inline"><input type="checkbox" name="team_task" value="on" {% if values.team_task %}checked{% endif %}> {{ t('task.teamTask') }}</label>
     <p class="hint">{{ t('task.teamTaskHint') }}</p>
   </div>
