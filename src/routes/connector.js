@@ -8,6 +8,7 @@ import {
 } from '../services/connector.js';
 import { PREVIEW_MINUTES, adminPreview, cancelPreview, confirmPreview } from '../services/previews.js';
 import { HttpError } from '../services/tasks.js';
+import { CARD_URI, cardResource } from '../ui/card.js';
 import {
   captureSchema, connectorActivitySchema, connectorAdminSchema, connectorCancelSchema, connectorCloseSchema, connectorCommentSchema,
   connectorConfirmSchema, connectorFlagSchema, connectorReadSchema, connectorSearchSchema, connectorTaskSchema, connectorUndoSchema,
@@ -304,6 +305,12 @@ const TOOLS = [
   },
 ];
 
+// Tools whose results come with Mahamm's card, for apps that show cards.
+const CARD_TOOLS = new Set(['create_tasks', 'update_tasks', 'close_tasks', 'join_task', 'my_work', 'get_task', 'admin_change']);
+for (const tool of TOOLS) {
+  if (CARD_TOOLS.has(tool.name)) tool._meta = { ...tool._meta, ui: { ...tool._meta?.ui, resourceUri: CARD_URI } };
+}
+
 const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data });
 const toolError = (text) => ({ content: [{ type: 'text', text }], isError: true });
 
@@ -341,7 +348,20 @@ function previewResult({ why, preview }) {
   return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data, _meta: { 'mahamm/confirm': { preview_id: shown.id, secret } } };
 }
 
+// The card needs to know which tool it shows and for whom; this goes in _meta,
+// which is for the card, not the text.
 async function callTool(config, name, args, ctx) {
+  const result = await runTool(config, name, args, ctx);
+  if (CARD_TOOLS.has(name)) {
+    result._meta = {
+      ...result._meta,
+      'mahamm/card': { tool: name, lang: ctx.user.lang, you: ctx.user.name, timezone: config.timezone, origin: config.origin, app_name: config.appName },
+    };
+  }
+  return result;
+}
+
+async function runTool(config, name, args, ctx) {
   const { user, ip } = ctx;
   const opts = { origin: config.origin, timezone: config.timezone, wipLimit: config.wipLimit };
   const run = async (schema, fn) => {
@@ -416,7 +436,7 @@ async function dispatch(config, msg, ctx) {
       const asked = params.protocolVersion;
       return {
         protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
-        capabilities: { tools: { listChanged: false } },
+        capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
         serverInfo: { name: 'mahamm', title: config.appName, version: '1.0.0' },
         instructions: INSTRUCTIONS,
       };
@@ -425,6 +445,15 @@ async function dispatch(config, msg, ctx) {
       return {};
     case 'tools/list':
       return { tools: TOOLS };
+    case 'resources/list': {
+      const { uri, mimeType, _meta } = cardResource(config.oauth);
+      return { resources: [{ uri, name: 'card', title: `${config.appName} card`, mimeType, _meta }] };
+    }
+    case 'resources/templates/list':
+      return { resourceTemplates: [] };
+    case 'resources/read':
+      if (params.uri !== CARD_URI) throw new RpcError(-32602, 'Unknown resource');
+      return { contents: [cardResource(config.oauth)] };
     case 'tools/call':
       if (typeof params.name !== 'string') throw new RpcError(-32602, 'Missing tool name');
       return callTool(config, params.name, params.arguments && typeof params.arguments === 'object' ? params.arguments : {}, ctx);

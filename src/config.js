@@ -36,6 +36,9 @@ const schema = z.object({
   OAUTH_REDIRECT_URIS: z.string().max(2000).optional(),
   // Also allow apps that run on the person's own computer (http://localhost:<any port>).
   OAUTH_ALLOW_LOOPBACK: z.enum(['true', 'false']).default('false'),
+  // Where a connected app shows the connector's cards, for apps that need it
+  // stated (a host name; the app's documentation gives the value).
+  CONNECTOR_UI_DOMAIN: z.string().max(253).regex(/^[a-z0-9.-]+$/).optional(),
 });
 
 export class ConfigError extends Error {}
@@ -112,6 +115,7 @@ export function loadConfig(env = process.env) {
       allowLoopback: c.OAUTH_ALLOW_LOOPBACK === 'true',
       issuer: origin,
       resource: `${origin}/connector`,
+      uiDomain: c.CONNECTOR_UI_DOMAIN || null,
     }),
     breachCheck: c.PASSWORD_BREACH_CHECK ? c.PASSWORD_BREACH_CHECK === 'true' : isProd,
     logLevel: c.NODE_ENV === 'test' ? 'silent' : c.LOG_LEVEL,

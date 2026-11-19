@@ -1,0 +1,499 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mahamm</title>
+<style>
+  :root { color-scheme: light dark; }
+  html, body { margin: 0; background: transparent; }
+  body {
+    font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI", sans-serif);
+    font-size: var(--font-text-md-size, 16px);
+    line-height: var(--font-text-md-line-height, 1.4);
+    color: var(--color-text-primary, #141413);
+  }
+  .card { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: var(--font-text-sm-size, 14px); color: var(--color-text-tertiary, #73726c); }
+  .brand { font-weight: var(--font-weight-semibold, 600); color: var(--color-text-secondary, #3d3d3a); }
+  h2 { margin: 0; font-size: var(--font-heading-md-size, 16px); line-height: var(--font-heading-md-line-height, 1.4); font-weight: var(--font-weight-semibold, 600); }
+  ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .task { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .task-top { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+  .task-id { color: var(--color-text-tertiary, #73726c); font-variant-numeric: tabular-nums; flex: none; }
+  .task-title { font-weight: var(--font-weight-medium, 500); overflow-wrap: anywhere; }
+  .meta, .note { font-size: var(--font-text-sm-size, 14px); color: var(--color-text-secondary, #3d3d3a); overflow-wrap: anywhere; }
+  .note.warn { color: var(--color-text-warning, #5a4815); }
+  .note.bad { color: var(--color-text-danger, #7f2c28); }
+  .note.good { color: var(--color-text-success, #265b19); }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 6px; background: var(--color-text-tertiary, #73726c); vertical-align: middle; }
+  .dot.todo { background: var(--color-border-info, #4682d5); }
+  .dot.in_progress { background: var(--color-border-warning, #805c1f); }
+  .dot.review { background: #8a63d2; }
+  .dot.done { background: var(--color-border-success, #437426); }
+  .flag { color: var(--color-text-danger, #7f2c28); }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .stat { background: var(--color-background-secondary, #f5f4ed); border-radius: var(--border-radius-md, 8px); padding: 6px 8px; min-width: 0; }
+  .stat b { display: block; font-size: var(--font-heading-lg-size, 20px); line-height: 1.2; }
+  .stat span { display: block; font-size: var(--font-text-xs-size, 12px); color: var(--color-text-secondary, #3d3d3a); overflow-wrap: anywhere; }
+  .steps { display: flex; gap: 4px; }
+  .steps button { flex: 1 1 0; min-width: 0; padding: 0 4px; font-weight: var(--font-weight-medium, 500); font-size: var(--font-text-sm-size, 14px); }
+  .steps button[aria-pressed="true"] { background: var(--color-background-info, #d6e4f6); color: var(--color-text-info, #3266ad); border-color: var(--color-border-info, #4682d5); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  button {
+    min-height: 44px; padding: 0 16px; flex: 1 1 auto; cursor: pointer; font: inherit;
+    font-weight: var(--font-weight-semibold, 600);
+    border-radius: var(--border-radius-md, 8px);
+    border: 1px solid var(--color-border-primary, rgba(31, 30, 29, 0.4));
+    background: var(--color-background-primary, #ffffff);
+    color: var(--color-text-primary, #141413);
+  }
+  button.primary { background: var(--color-background-inverse, #141413); color: var(--color-text-inverse, #ffffff); border-color: transparent; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button:focus-visible { outline: 2px solid var(--color-ring-info, #3266ad); outline-offset: 2px; }
+  .skeleton { height: 64px; border-radius: var(--border-radius-md, 8px); background: var(--color-background-secondary, #f5f4ed); }
+</style>
+</head>
+<body>
+<div id="root" class="card" aria-live="polite"><div class="skeleton"></div></div>
+<script>
+'use strict';
+// A card for the Mahamm connector: shows what a tool did and offers its next
+// step (Undo, Confirm, Start, Join, Done). It talks to the app showing it with
+// JSON-RPC messages through window.parent, and calls the connector's tools
+// through the app. Everything shown is built with DOM methods; text from tasks
+// is only ever set as text.
+const STRINGS = "__STRINGS__";
+const STATUS_KEY = { backlog: 'backlog', todo: 'todo', in_progress: 'progress', review: 'review', done: 'done' };
+const PRIORITY_KEY = { high: 'high', medium: 'med', low: 'low' };
+const REASON_KEY = { completed: 'completed', not_needed: 'notneeded', duplicate: 'duplicate', mistake: 'mistake' };
+const STEPS = ['backlog', 'todo', 'in_progress', 'review'];
+
+const root = document.getElementById('root');
+const state = { lang: 'en', tool: null, data: null, meta: {}, error: null, busy: false, note: null, after: null, result: null, batch: null, undoUntil: null };
+let words = STRINGS.en;
+
+// ---------- messages with the app ----------
+let nextId = 1;
+const pending = new Map();
+function send(message) { window.parent.postMessage(message, '*'); }
+function request(method, params) {
+  const id = nextId++;
+  send({ jsonrpc: '2.0', id, method, params });
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    setTimeout(() => { if (pending.delete(id)) reject(new Error('no answer')); }, 30000);
+  });
+}
+function notify(method, params) { send({ jsonrpc: '2.0', method, params }); }
+
+window.addEventListener('message', (event) => {
+  if (event.source !== window.parent) return;
+  const m = event.data;
+  if (!m || m.jsonrpc !== '2.0') return;
+  if (m.id !== undefined && m.method === undefined) {
+    const waiting = pending.get(m.id);
+    if (!waiting) return;
+    pending.delete(m.id);
+    if (m.error) waiting.reject(new Error(m.error.message || 'error'));
+    else waiting.resolve(m.result);
+    return;
+  }
+  if (m.method === 'ui/notifications/tool-result') show(m.params || {});
+  else if (m.method === 'ui/notifications/host-context-changed') applyContext(m.params || {});
+  else if ((m.method === 'ui/resource-teardown' || m.method === 'ping') && m.id !== undefined) send({ jsonrpc: '2.0', id: m.id, result: {} });
+});
+
+let fontsAdded = false;
+function applyContext(ctx) {
+  const vars = ctx.styles && ctx.styles.variables;
+  if (vars) for (const [k, v] of Object.entries(vars)) if (k.startsWith('--') && typeof v === 'string') document.documentElement.style.setProperty(k, v);
+  const fonts = ctx.styles && ctx.styles.css && ctx.styles.css.fonts;
+  if (fonts && !fontsAdded) { const style = document.createElement('style'); style.textContent = fonts; document.head.append(style); fontsAdded = true; }
+  if (ctx.theme) document.documentElement.dataset.theme = ctx.theme;
+}
+
+function reportSize() {
+  const box = document.body.getBoundingClientRect();
+  notify('ui/notifications/size-changed', { width: Math.ceil(box.width), height: Math.ceil(box.height) });
+}
+new ResizeObserver(reportSize).observe(document.body);
+
+async function start() {
+  try {
+    const init = await request('ui/initialize', {
+      protocolVersion: '2026-01-26',
+      clientInfo: { name: 'mahamm-card', version: '1.0.0' },
+      appCapabilities: { availableDisplayModes: ['inline'] },
+    });
+    applyContext((init && init.hostContext) || {});
+  } catch { /* the app may not answer; show results anyway */ }
+  notify('ui/notifications/initialized', {});
+}
+
+// ---------- words ----------
+function lookup(dict, path) { return path.split('.').reduce((n, k) => (n && typeof n === 'object' ? n[k] : undefined), dict); }
+function t(path, vars) {
+  let v = lookup(words, path);
+  if (typeof v !== 'string') v = lookup(STRINGS.en, path);
+  if (typeof v !== 'string') return path;
+  return vars ? v.replace(/\{(\w+)\}/g, (m, k) => (vars[k] === undefined || vars[k] === null ? '' : String(vars[k]))) : v;
+}
+const list = (items) => items.join(t('card.listSep'));
+const ids = (items) => list(items.map((n) => `#${n}`));
+
+// ---------- building blocks ----------
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+function bdi(text) { const b = document.createElement('bdi'); b.textContent = text; return b; }
+function button(label, onClick, { primary = false, disabled = false } = {}) {
+  const b = el('button', primary ? 'primary' : '', label);
+  b.type = 'button';
+  b.disabled = disabled || state.busy;
+  b.addEventListener('click', onClick);
+  return b;
+}
+function statusText(s) { return t(`status.${STATUS_KEY[s] || s}`); }
+function taskItem(task, extra) {
+  const li = el('li', 'task');
+  const top = el('div', 'task-top');
+  if (task.id) top.append(el('span', 'task-id', `#${task.id}`));
+  const title = bdi(task.title);
+  title.className = 'task-title';
+  top.append(title);
+  const meta = el('div', 'meta');
+  if (task.status) { const dot = el('span', `dot ${task.status}`); dot.setAttribute('aria-hidden', 'true'); meta.append(dot); }
+  // Dates stay left to right inside Arabic text.
+  const parts = [];
+  if (task.status) parts.push(statusText(task.status));
+  if (task.priority) parts.push(t(`priority.${PRIORITY_KEY[task.priority]}`));
+  if (task.assignees) parts.push(task.assignees.length ? list(task.assignees) : t('card.unassigned'));
+  if ('due_date' in task) {
+    if (task.due_date) { const d = bdi(task.due_date); d.dir = 'ltr'; parts.push(d); } else parts.push(t('card.noDueDate'));
+  }
+  if (task.team_task) parts.push(t('card.teamTask'));
+  parts.forEach((part, i) => {
+    if (i) meta.append(document.createTextNode(' · '));
+    meta.append(typeof part === 'string' ? document.createTextNode(part) : part);
+  });
+  if (task.flagged) { meta.append(document.createTextNode(' · ')); meta.append(el('span', 'flag', t('card.flagged'))); }
+  li.append(top, meta);
+  if (extra) li.append(extra);
+  return li;
+}
+function taskList(tasks, limit = 5) {
+  const ul = el('ul');
+  for (const task of tasks.slice(0, limit)) {
+    let extra = null;
+    if (task.similar && task.similar.length) extra = el('div', 'note warn', t('card.looksLike', { ids: ids(task.similar.map((s) => s.id)) }));
+    ul.append(taskItem(task, extra));
+  }
+  if (tasks.length > limit) ul.append(el('li', 'meta', t('card.andMore', { count: tasks.length - limit })));
+  return ul;
+}
+function questions(data) {
+  const asks = [];
+  const all = [...(data.missing || []), ...((data.tasks || []).flatMap((x) => x.missing || []))];
+  for (const m of all) {
+    if (m.problem === 'several_people') asks.push(t('card.whichOne', { name: m.heard, options: list(m.could_be || []) }));
+    else if (m.problem === 'no_such_label') asks.push(t('card.noLabel', { name: m.heard }));
+    else asks.push(t('card.whoIs', { name: m.heard }));
+  }
+  return asks.length ? t('card.askInChat', { question: list(asks) }) : null;
+}
+function timeOf(iso) {
+  try {
+    return new Intl.DateTimeFormat(state.lang === 'ar' ? 'ar-OM' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: state.meta.timezone || undefined }).format(new Date(iso));
+  } catch { return ''; }
+}
+function openMahamm(path) {
+  request('ui/open-link', { url: `${state.meta.origin || ''}${path}` }).catch(() => {});
+}
+function tellModel(text) {
+  request('ui/update-model-context', { content: [{ type: 'text', text }] }).catch(() => {});
+}
+const textOf = (result) => ((result && result.content) || []).map((c) => c.text || '').join(' ').trim();
+
+// Calls a connector tool through the app; returns its structured result, or
+// shows why it failed and returns null.
+async function tool(name, args) {
+  state.busy = true;
+  state.note = null;
+  render();
+  try {
+    const result = await request('tools/call', { name, arguments: args });
+    if (result && result.isError) { state.note = { kind: 'bad', text: t('card.failed', { reason: textOf(result) }) }; return null; }
+    return (result && result.structuredContent) || {};
+  } catch (err) {
+    state.note = { kind: 'bad', text: t('card.failed', { reason: err.message }) };
+    return null;
+  } finally {
+    state.busy = false;
+  }
+}
+
+// ---------- what each tool shows ----------
+function undoButton(batch, until) {
+  if (!batch) return null;
+  if (state.after === 'undone') return button(t('card.undone'), () => {}, { disabled: true });
+  const live = !until || new Date(until).getTime() > Date.now();
+  if (!live) return button(t('card.undoGone'), () => {}, { disabled: true });
+  if (until) setTimeout(render, Math.max(0, new Date(until).getTime() - Date.now()) + 50);
+  return button(t('card.undo'), async () => {
+    const done = await tool('undo', { batch });
+    if (done) {
+      state.after = 'undone';
+      const changed = (done.changed || []).length;
+      state.note = changed ? { kind: 'warn', text: t('card.undoPartly', { ids: ids(done.changed) }) } : null;
+      tellModel(`The person pressed Undo on the Mahamm card for batch ${batch}. Undone: ${(done.undone || []).join(', ') || 'none'}.`);
+    }
+    render();
+  });
+}
+
+function viewAdded(card, data) {
+  const tasks = data.tasks || [];
+  card.append(el('h2', '', tasks.length === 1 ? t('card.addedOne') : t('card.addedMany', { count: tasks.length })));
+  card.append(taskList(tasks, 6));
+  const ask = questions(data);
+  if (ask) card.append(el('div', 'note warn', ask));
+  if (data.warning) card.append(el('div', 'note warn', t('card.overLimit')));
+  const actions = el('div', 'actions');
+  const undo = undoButton(data.batch, data.undo_until);
+  if (undo) actions.append(undo);
+  if (tasks.length === 1 && state.after !== 'undone') {
+    const task = tasks[0];
+    actions.append(button(task.team_task ? t('card.teamOn') : t('card.teamOff'), async () => {
+      const done = await tool('update_tasks', { task_ids: [task.id], team_task: !task.team_task });
+      if (done && done.tasks && done.tasks[0]) Object.assign(task, done.tasks[0]);
+      render();
+    }));
+  }
+  if (actions.childNodes.length) card.append(actions);
+}
+
+function viewChanged(card, data) {
+  if (data.task) {
+    const head = data.joined ? t('card.joined', { id: data.task.id }) : t('card.alreadyOn', { id: data.task.id });
+    card.append(el('h2', '', head));
+    card.append(taskList([data.task]));
+  } else if (data.changed === false) {
+    card.append(el('h2', '', t('card.nothingChanged')));
+    const ask = questions(data);
+    if (ask) card.append(el('div', 'note warn', ask));
+    if (data.needs_credit && data.needs_credit.length) card.append(el('div', 'note warn', t('card.needsCredit', { ids: ids(data.needs_credit) })));
+  } else {
+    const tasks = data.tasks || [];
+    const closed = state.tool === 'close_tasks' || (data.kind === 'close');
+    const key = closed ? (tasks.length === 1 ? 'card.closedOne' : 'card.closedMany') : (tasks.length === 1 ? 'card.changedOne' : 'card.changedMany');
+    card.append(el('h2', '', t(key, { count: tasks.length })));
+    card.append(taskList(tasks));
+  }
+  const skipped = data.skipped || {};
+  if (skipped.not_allowed && skipped.not_allowed.length) card.append(el('div', 'note warn', t('card.notAllowed', { ids: ids(skipped.not_allowed) })));
+  const undo = undoButton(data.batch, data.undo_until);
+  if (undo) { const actions = el('div', 'actions'); actions.append(undo); card.append(actions); }
+}
+
+function previewHeading(p) {
+  if (p.kind === 'update') return t('preview.update', { count: p.count });
+  if (p.kind === 'close') return t('preview.close', { count: p.count });
+  if (p.kind === 'create') return t('preview.create', { count: p.count });
+  if (p.action === 'add_person') return t('preview.addPerson', { name: p.name });
+  return t('preview.setLimit', { from: p.from, to: p.to });
+}
+function previewLines(p) {
+  const lines = [];
+  const c = p.changes || {};
+  if (c.status) lines.push(t('preview.status', { value: statusText(c.status) }));
+  if (c.priority) lines.push(t('preview.priority', { value: t(`priority.${PRIORITY_KEY[c.priority]}`) }));
+  if ('due_date' in c) lines.push(t('preview.due', { value: c.due_date || t('preview.noDueDate') }));
+  if (c.add_assignees) lines.push(t('preview.addPeople', { names: list(c.add_assignees) }));
+  if (c.remove_assignees) lines.push(t('preview.removePeople', { names: list(c.remove_assignees) }));
+  if (c.add_labels) lines.push(t('preview.addLabels', { names: list(c.add_labels) }));
+  if (c.remove_labels) lines.push(t('preview.removeLabels', { names: list(c.remove_labels) }));
+  if ('team_task' in c) lines.push(t(c.team_task ? 'preview.teamOn' : 'preview.teamOff'));
+  if ('title' in c) lines.push(t('preview.newTitle', { value: c.title }));
+  if ('description' in c) lines.push(t('preview.newDescription'));
+  if (p.kind === 'close') {
+    lines.push(t('preview.reason', { value: t(`reason.${REASON_KEY[p.reason]}`) }));
+    if (p.credit && p.credit.length) lines.push(t('preview.credit', { names: list(p.credit) }));
+    else if (p.reason === 'completed') lines.push(t('preview.creditAssignees'));
+  }
+  return lines;
+}
+
+function viewPreview(card, data) {
+  const p = data.preview || {};
+  const result = state.result;
+  if (result) {
+    // After Confirm: what was done, with its Undo.
+    if (result.gone) {
+      card.append(el('h2', '', previewHeading(p)));
+      card.append(el('div', 'note warn', t(`card.gone.${result.gone}`)));
+      return;
+    }
+    card.append(el('h2', '', t('card.confirmed')));
+    if (result.tasks) card.append(taskList(result.tasks));
+    if (result.added_person) card.append(el('div', 'meta', previewHeading(p)));
+    if (result.in_progress_limit) card.append(el('div', 'meta', previewHeading(p)));
+    const undo = undoButton(result.batch, result.undo_until);
+    if (undo) { const actions = el('div', 'actions'); actions.append(undo); card.append(actions); }
+    return;
+  }
+  card.append(el('h2', '', previewHeading(p)));
+  const lines = previewLines(p);
+  if (lines.length) {
+    const ul = el('ul');
+    for (const line of lines) { const li = el('li', 'meta'); li.append(bdi(line)); ul.append(li); }
+    card.append(ul);
+  }
+  // Changes and closes list the tasks by title; new tasks show what they will be.
+  if (p.tasks) card.append(taskList(p.kind === 'create' ? p.tasks : p.tasks.map((x) => ({ id: x.id, title: x.title })), 5));
+  if (state.after === 'cancelled') { card.append(el('div', 'note', t('card.cancelled'))); return; }
+  const expired = p.expires_at && new Date(p.expires_at).getTime() <= Date.now();
+  if (expired) { card.append(el('div', 'note warn', t('card.gone.expired'))); return; }
+  if (p.expires_at) {
+    card.append(el('div', 'meta', t('card.waitingUntil', { time: timeOf(p.expires_at) })));
+    setTimeout(render, Math.max(0, new Date(p.expires_at).getTime() - Date.now()) + 50);
+  }
+  const confirm = state.meta.confirm || {};
+  const actions = el('div', 'actions');
+  actions.append(button(t('card.confirm'), async () => {
+    const done = await tool('confirm_preview', { preview_id: confirm.preview_id, secret: confirm.secret });
+    if (done) {
+      state.result = done;
+      if (done.done) tellModel(`The person confirmed the Mahamm change on the card (${p.kind}). It has been made.`);
+    }
+    render();
+  }, { primary: true, disabled: !confirm.secret }));
+  actions.append(button(t('card.cancel'), async () => {
+    const done = await tool('cancel_preview', { preview_id: p.id });
+    if (done) {
+      if (done.gone) state.result = done;
+      else { state.after = 'cancelled'; tellModel('The person cancelled the Mahamm change on the card. Nothing changed.'); }
+    }
+    render();
+  }));
+  card.append(actions);
+}
+
+function viewMyDay(card, data) {
+  card.append(el('h2', '', t('card.myDay')));
+  const stats = el('div', 'stats');
+  const counts = data.counts || {};
+  const stat = (n, label) => { const box = el('div', 'stat'); box.append(el('b', '', String(n)), el('span', '', label)); stats.append(box); };
+  stat((data.overdue || []).length, t('card.overdue'));
+  stat((data.due_today || []).length, t('card.dueToday'));
+  stat(counts.in_progress || 0, t('card.inProgress'));
+  stat(counts.waiting_for_your_review || 0, t('card.toReview'));
+  card.append(stats);
+  const mine = data.my_tasks || [];
+  const byId = new Map(mine.map((x) => [x.id, x]));
+  const order = [...(data.overdue || []), ...(data.due_today || []), ...mine.filter((x) => x.status === 'in_progress').map((x) => x.id)];
+  const top = [...new Set(order)].map((n) => byId.get(n)).filter(Boolean).slice(0, 3);
+  if (top.length) card.append(taskList(top, 3));
+  else card.append(el('div', 'meta', t('card.nothingDue')));
+  const next = mine.find((x) => x.status === 'todo');
+  const actions = el('div', 'actions');
+  if (next) {
+    const started = state.after === `started:${next.id}`;
+    actions.append(button(started ? t('card.started', { id: next.id }) : t('card.start', { id: next.id }), async () => {
+      const done = await tool('update_tasks', { task_ids: [next.id], status: 'in_progress' });
+      if (done && done.changed) { state.after = `started:${next.id}`; next.status = 'in_progress'; }
+      render();
+    }, { primary: true, disabled: started }));
+  }
+  actions.append(button(t('card.open', { appName: state.meta.app_name || 'Mahamm' }), () => openMahamm('/home')));
+  card.append(actions);
+}
+
+function viewTask(card, data) {
+  const task = data;
+  card.append(taskList([task], 1));
+  const steps = el('div', 'steps');
+  steps.setAttribute('role', 'group');
+  steps.setAttribute('aria-label', t('card.status'));
+  for (const s of STEPS) {
+    const b = button(statusText(s), async () => {
+      const done = await tool('update_tasks', { task_ids: [task.id], status: s });
+      if (done && done.tasks && done.tasks[0]) { Object.assign(task, done.tasks[0]); state.batch = done.batch; state.undoUntil = done.undo_until; }
+      render();
+    }, { disabled: task.status === s });
+    b.setAttribute('aria-pressed', String(task.status === s));
+    steps.append(b);
+  }
+  card.append(steps);
+  const actions = el('div', 'actions');
+  const mine = (task.assignees || []).includes(state.meta.you);
+  if (task.status === 'done') {
+    const undo = undoButton(state.batch, state.undoUntil);
+    if (undo) actions.append(undo);
+  } else if (mine) {
+    actions.append(button(t('card.done'), async () => {
+      const done = await tool('close_tasks', { task_ids: [task.id], reason: 'completed' });
+      if (done && done.changed === false && done.needs_credit) state.note = { kind: 'warn', text: t('card.doneNeedsCredit') };
+      else if (done && done.tasks && done.tasks[0]) { Object.assign(task, done.tasks[0]); state.batch = done.batch; state.undoUntil = done.undo_until; state.after = null; }
+      render();
+    }, { primary: true }));
+  } else {
+    actions.append(button(t('card.join'), async () => {
+      const done = await tool('join_task', { task_id: task.id });
+      if (done && done.task) Object.assign(task, done.task);
+      render();
+    }, { primary: true }));
+  }
+  actions.append(button(t('card.openTask'), () => openMahamm(`/tasks/${task.id}`)));
+  card.append(actions);
+}
+
+// ---------- drawing ----------
+function show(result) {
+  const meta = (result._meta && result._meta['mahamm/card']) || {};
+  state.meta = { ...meta, confirm: result._meta && result._meta['mahamm/confirm'] };
+  state.tool = meta.tool || null;
+  state.lang = meta.lang === 'ar' ? 'ar' : 'en';
+  words = STRINGS[state.lang];
+  document.documentElement.lang = state.lang;
+  document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
+  state.error = result.isError ? textOf(result) : null;
+  state.data = result.structuredContent || null;
+  render();
+}
+
+function render() {
+  const card = el('div', 'card');
+  card.id = 'root';
+  card.setAttribute('aria-live', 'polite');
+  const head = el('div', 'head');
+  head.append(el('span', 'brand', state.meta.app_name || 'Mahamm'));
+  card.append(head);
+  const data = state.data;
+  if (state.error) {
+    card.append(el('div', 'note bad', t('card.failed', { reason: state.error })));
+  } else if (!data) {
+    card.append(el('div', 'skeleton'));
+  } else if (data.waiting_for_confirmation) {
+    viewPreview(card, data);
+  } else if (state.tool === 'create_tasks') {
+    viewAdded(card, data);
+  } else if (state.tool === 'my_work') {
+    viewMyDay(card, data);
+  } else if (state.tool === 'get_task') {
+    viewTask(card, data);
+  } else {
+    viewChanged(card, data);
+  }
+  if (state.note) card.append(el('div', `note ${state.note.kind}`, state.note.text));
+  document.getElementById('root').replaceWith(card);
+  reportSize();
+}
+
+start();
+</script>
+</body>
+</html>
