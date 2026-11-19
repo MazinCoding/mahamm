@@ -16,7 +16,7 @@ export class HttpError extends Error {
 }
 
 // Shared column list for cards and rows: people, labels and counts as JSON.
-const CARD_COLUMNS = `
+export const CARD_COLUMNS = `
   t.id, t.title, t.status, t.priority, t.due_date, t.created_at, t.closed_at, t.close_reason, t.creator_id, t.imported, t.team_task,
   cu.name AS creator_name, cb.name AS closed_by_name, t.closed_by,
   COALESCE((SELECT json_agg(json_build_object('id', u.id, 'name', u.name) ORDER BY u.name)
@@ -29,7 +29,7 @@ const CARD_COLUMNS = `
   (SELECT count(*)::int FROM attachments a WHERE a.task_id = t.id AND a.removed_at IS NULL) AS file_count,
   (SELECT count(*)::int FROM flags f WHERE f.task_id = t.id AND f.resolved_at IS NULL) AS open_flags`;
 
-const CARD_FROM = `FROM tasks t JOIN users cu ON cu.id = t.creator_id LEFT JOIN users cb ON cb.id = t.closed_by`;
+export const CARD_FROM = `FROM tasks t JOIN users cu ON cu.id = t.creator_id LEFT JOIN users cb ON cb.id = t.closed_by`;
 
 export async function boardTasks({ onlyUserId = null } = {}) {
   const params = [];
@@ -152,7 +152,7 @@ export async function listTasks({ state = 'open', q: search = '', label = null, 
   return { rows, counts };
 }
 
-function escapeLike(s) {
+export function escapeLike(s) {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
@@ -349,7 +349,7 @@ export async function lockTask(db, id) {
   return rows[0];
 }
 
-async function reopenInside(db, task, actor, ip, toStatus, details = {}) {
+export async function reopenInside(db, task, actor, ip, toStatus, details = {}) {
   await db.query(
     `UPDATE tasks SET closed_at = NULL, closed_by = NULL, close_reason = NULL, duplicate_of = NULL, status = $2, updated_at = now() WHERE id = $1`,
     [task.id, toStatus],
@@ -583,11 +583,21 @@ export async function undoBatch(batch, actor, ip) {
         changed.push(t.id);
         continue;
       } else if (e.action === 'task.moved') {
+        // A move out of Done reopened the task; closing it again needs a reason and credit, so it isn't undone here.
+        if (d.from === 'done') { changed.push(t.id); continue; }
         await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [t.id, d.from]);
         await audit(db, { actorId: actor.id, action: 'task.moved', taskId: t.id, details: { from: d.to, to: d.from, ...details }, ip });
       } else {
         const c = d.changes || {};
         const back = {};
+        if (c.title) {
+          await db.query('UPDATE tasks SET title = $2 WHERE id = $1', [t.id, c.title.from]);
+          back.title = { from: c.title.to, to: c.title.from };
+        }
+        if (c.description && typeof c.description.previous === 'string') {
+          await db.query('UPDATE tasks SET description = $2 WHERE id = $1', [t.id, c.description.previous]);
+          back.description = { changed: true, from_length: c.description.to_length, to_length: c.description.previous.length };
+        }
         if (c.priority) {
           await db.query('UPDATE tasks SET priority = $2 WHERE id = $1', [t.id, c.priority.from]);
           back.priority = { from: c.priority.to, to: c.priority.from };
@@ -621,7 +631,7 @@ export async function undoBatch(batch, actor, ip) {
 
 // Join: anyone can add themselves to any open task. It's recorded like any other
 // assignee change, with a batch id so Undo can take it back.
-export async function joinTask(id, actor, ip) {
+export async function joinTask(id, actor, ip, extra = {}) {
   return tx(async (db) => {
     const task = await lockTask(db, id);
     if (task.closed_at) throw new HttpError(409, 'task closed');
@@ -633,7 +643,7 @@ export async function joinTask(id, actor, ip) {
     const batch = randomUUID();
     await db.query('UPDATE tasks SET updated_at = now() WHERE id = $1', [id]);
     await audit(db, {
-      actorId: actor.id, action: 'task.edited', taskId: id, details: { changes: { assignees: { added: [actor.id], removed: [] } }, batch }, ip,
+      actorId: actor.id, action: 'task.edited', taskId: id, details: { changes: { assignees: { added: [actor.id], removed: [] } }, batch, ...extra }, ip,
     });
     return { joined: true, batch };
   });
@@ -686,13 +696,13 @@ export async function reopenTask(id, actor, ip) {
   });
 }
 
-export async function addComment(id, body, actor, ip) {
+export async function addComment(id, body, actor, ip, extra = {}) {
   return tx(async (db) => {
     const task = await lockTask(db, id);
     const { rows } = await db.query(
       'INSERT INTO comments (task_id, author_id, body) VALUES ($1, $2, $3) RETURNING id', [id, actor.id, body],
     );
-    await audit(db, { actorId: actor.id, action: 'task.commented', taskId: id, details: { comment_id: rows[0].id, excerpt: body.slice(0, 120) }, ip });
+    await audit(db, { actorId: actor.id, action: 'task.commented', taskId: id, details: { comment_id: rows[0].id, excerpt: body.slice(0, 120), ...extra }, ip });
     const mentioned = await findMentions(db, body);
     await notify(db, { kind: 'mentioned', taskId: id, task, actor, userIds: mentioned });
     const followers = (await db.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
@@ -773,14 +783,14 @@ export async function getAttachment(attachmentId) {
   );
 }
 
-export async function flagTask(id, { reason, note }, actor, ip) {
+export async function flagTask(id, { reason, note }, actor, ip, extra = {}) {
   if (!FLAG_REASONS.includes(reason)) throw new HttpError(400, 'bad reason');
   return tx(async (db) => {
     const task = await lockTask(db, id);
     const { rows } = await db.query(
       'INSERT INTO flags (task_id, flagged_by, reason, note) VALUES ($1, $2, $3, $4) RETURNING id', [id, actor.id, reason, note],
     );
-    await audit(db, { actorId: actor.id, action: 'task.flagged', taskId: id, details: { flag_id: rows[0].id, reason, note }, ip });
+    await audit(db, { actorId: actor.id, action: 'task.flagged', taskId: id, details: { flag_id: rows[0].id, reason, note, ...extra }, ip });
     // Tell whoever created the task; if they flagged it themselves, tell the admins.
     let recipients = [task.creator_id];
     if (task.creator_id === actor.id) {
@@ -791,7 +801,7 @@ export async function flagTask(id, { reason, note }, actor, ip) {
   });
 }
 
-export async function resolveFlag(taskId, flagId, resolution, actor, ip) {
+export async function resolveFlag(taskId, flagId, resolution, actor, ip, extra = {}) {
   if (!['fixed', 'dismissed'].includes(resolution)) throw new HttpError(400, 'bad resolution');
   return tx(async (db) => {
     const task = await lockTask(db, taskId);
@@ -802,6 +812,6 @@ export async function resolveFlag(taskId, flagId, resolution, actor, ip) {
       [flagId, taskId, actor.id, resolution],
     );
     if (!rows[0]) throw new HttpError(404, 'flag not found');
-    await audit(db, { actorId: actor.id, action: 'task.flag_resolved', taskId, details: { flag_id: flagId, resolution }, ip });
+    await audit(db, { actorId: actor.id, action: 'task.flag_resolved', taskId, details: { flag_id: flagId, resolution, ...extra }, ip });
   });
 }

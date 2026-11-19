@@ -109,3 +109,24 @@ export async function makeTask(agent, fields = {}) {
 export async function auditFor(taskId) {
   return (await q('SELECT action, actor_id, details FROM audit_events WHERE task_id = $1 ORDER BY id', [taskId])).rows;
 }
+
+// Connects `user` the way an outside app would (registration, consent, code
+// exchange with PKCE) and returns an access token for the connector.
+export async function connectApp(app, user, returnUri) {
+  const { createHash, randomBytes } = await import('node:crypto');
+  const agent = await signIn(app, user);
+  const reg = await request(app).post('/oauth/register').send({ client_name: 'Test app', redirect_uris: [returnUri] });
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  const page = await agent.get(`/oauth/authorize?${new URLSearchParams({
+    response_type: 'code', client_id: reg.body.client_id, redirect_uri: returnUri, code_challenge: challenge, code_challenge_method: 'S256', scope: 'tasks offline_access',
+  })}`);
+  const form = page.text.slice(page.text.indexOf('action="/oauth/authorize"'));
+  const fields = Object.fromEntries([...form.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)].map((m) => [m[1], m[2].replace(/&amp;/g, '&')]));
+  const back = await agent.post('/oauth/authorize').type('form').send({ ...fields, decision: 'allow' });
+  const code = new URL(back.headers.location).searchParams.get('code');
+  const res = await request(app).post('/oauth/token').type('form')
+    .send({ grant_type: 'authorization_code', client_id: reg.body.client_id, code, redirect_uri: returnUri, code_verifier: verifier });
+  if (res.status !== 200) throw new Error(`token exchange failed: ${res.status} ${res.text}`);
+  return res.body.access_token;
+}

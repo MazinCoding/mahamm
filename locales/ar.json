@@ -376,6 +376,7 @@
     "labelUpdated": "تحديث التصنيف {name}",
     "auditExported": "تصدير سجل التدقيق ({rows} صفًا)",
     "undo": " (تراجع)",
+    "via": " (عبر تطبيق متصل)",
     "wipLimitChanged": "تغيير حد المهام قيد التنفيذ من {from} إلى {to}",
     "invitedPerson": "دعوة {person} بصفة {role} ({email})",
     "inviteAcceptedRenamed": "قبول الدعوة وتغيير الاسم من «{from}»",

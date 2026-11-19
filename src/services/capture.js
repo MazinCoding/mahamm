@@ -61,7 +61,7 @@ export async function teamPeople(db = { query: q }) {
   return rows;
 }
 
-function resolveNames(names, people) {
+export function resolveNames(names, people) {
   const ids = [];
   const missing = [];
   for (const heard of names) {
@@ -75,6 +75,22 @@ function resolveNames(names, people) {
     }
   }
   return { ids, missing };
+}
+
+// Settles the automatic "No assignee" flag on a task once someone is assigned.
+export async function settleNoAssignee(db, id, actor, ip, extra = {}) {
+  const { rows: settled } = await db.query(
+    `UPDATE flags f SET resolved_at = now(), resolved_by = $2, resolution = 'fixed'
+     WHERE f.task_id = $1 AND f.resolved_at IS NULL AND EXISTS (
+       SELECT 1 FROM audit_events e WHERE e.task_id = $1 AND e.action = 'task.flagged'
+         AND e.details->>'auto' = 'no_assignee' AND (e.details->>'flag_id')::int = f.id)
+     RETURNING f.id`,
+    [id, actor.id],
+  );
+  for (const f of settled) {
+    await audit(db, { actorId: actor.id, action: 'task.flag_resolved', taskId: id, details: { flag_id: f.id, resolution: 'fixed', ...extra }, ip });
+  }
+  return settled.length;
 }
 
 export function summary(task, origin) {
@@ -224,19 +240,7 @@ export async function updateCaptured(id, changes, actor, ip, { origin }) {
     }
 
     // Someone is assigned now, so the automatic "No assignee" flag is settled.
-    if (added.length) {
-      const { rows: settled } = await db.query(
-        `UPDATE flags f SET resolved_at = now(), resolved_by = $2, resolution = 'fixed'
-         WHERE f.task_id = $1 AND f.resolved_at IS NULL AND EXISTS (
-           SELECT 1 FROM audit_events e WHERE e.task_id = $1 AND e.action = 'task.flagged'
-             AND e.details->>'auto' = 'no_assignee' AND (e.details->>'flag_id')::int = f.id)
-         RETURNING f.id`,
-        [id, actor.id],
-      );
-      for (const f of settled) {
-        await audit(db, { actorId: actor.id, action: 'task.flag_resolved', taskId: id, details: { flag_id: f.id, resolution: 'fixed', batch, via: 'connector' }, ip });
-      }
-    }
+    if (added.length) await settleNoAssignee(db, id, actor, ip, { batch, via: 'connector' });
     return { missing };
   });
   return { ...summary(await getTask(id), origin), missing: result.missing };

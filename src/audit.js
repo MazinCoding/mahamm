@@ -36,9 +36,15 @@ const clip = (s, n = 80) => {
   return str.length > n ? `${str.slice(0, n - 1)}…` : str;
 };
 
-// Turns an event into one readable sentence in the viewer's language.
+// Turns an event into one readable sentence in the viewer's language, noting
+// changes made through a connected app.
 // `names` maps user ids to display names; `labels` maps label ids to names.
-export function describe(ev, t, { names = {}, labels = {} } = {}) {
+export function describe(ev, t, options = {}) {
+  const text = sentence(ev, t, options);
+  return ev.details?.via === 'connector' && TASK_ACTIONS.includes(ev.action) ? text + t('ev.via') : text;
+}
+
+function sentence(ev, t, { names = {}, labels = {} } = {}) {
   const d = ev.details || {};
   const who = (id) => names[id] || t('common.formerUser');
   const list = (ids) => (ids || []).map(who).join(t('common.listSep'));
