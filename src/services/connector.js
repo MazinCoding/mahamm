@@ -3,7 +3,10 @@ import { TASK_ACTIONS, audit, describe } from '../audit.js';
 import { q, tx } from '../db.js';
 import { translator } from '../i18n.js';
 import { notifyBatch } from '../notify.js';
-import { matchPerson, normaliseName, resolveNames, settleNoAssignee, teamPeople, undoCapture } from './capture.js';
+import {
+  captureTasks, matchPerson, normaliseName, resolveLabels, resolveNames, settleNoAssignee, teamPeople, undoCapture,
+} from './capture.js';
+import { createPreview } from './previews.js';
 import { getWipLimit, inProgressCount } from './settings.js';
 import {
   CARD_COLUMNS, CARD_FROM, HttpError, UNDO_MINUTES, activeIds, addComment, applyEdit, canEdit, escapeLike, flagTask,
@@ -18,8 +21,9 @@ import {
 
 export const PER_PAGE = 25;
 // More tasks than this in one change, or taking someone else off a task,
-// needs the person to confirm first.
+// needs the person to confirm first; so does adding more than MAX_ADD tasks.
 export const MAX_DIRECT = 5;
+export const MAX_ADD = 10;
 const VIA = 'connector';
 
 const STATUS_IN = { backlog: 'backlog', todo: 'todo', in_progress: 'progress', review: 'review' };
@@ -90,17 +94,6 @@ async function allLabels(db = { query: q }) {
   return (await db.query('SELECT id, name_en, name_ar FROM labels ORDER BY id')).rows;
 }
 
-export function resolveLabels(names, labels) {
-  const ids = [];
-  const missing = [];
-  for (const heard of names) {
-    const h = normaliseName(heard);
-    const hit = labels.find((l) => normaliseName(l.name_en) === h || normaliseName(l.name_ar) === h);
-    if (hit) { if (!ids.includes(hit.id)) ids.push(hit.id); } else missing.push({ heard, problem: 'no_such_label' });
-  }
-  return { ids, missing };
-}
-
 const isMe = (heard) => ['me', 'myself', 'انا', 'أنا'].includes(String(heard).trim().toLowerCase());
 
 // Names to people, where "me" is the person acting.
@@ -121,6 +114,10 @@ function personResolver(actor, people, problems) {
       : { heard, problem: 'nobody_by_that_name' });
     return null;
   };
+}
+
+async function titles(ids) {
+  return (await q('SELECT id, title FROM tasks WHERE id = ANY($1::int[]) ORDER BY id', [ids])).rows;
 }
 
 async function namesById(db = { query: q }) {
@@ -344,7 +341,9 @@ function confirmationReasons({ count, removesOthers = false }) {
 }
 
 // input: { task_ids, status, priority, due_date, add_assignees, remove_assignees, add_labels, remove_labels, title, description, team_task }
-export async function updateTasks(input, actor, ip, { origin }) {
+// opts.confirmed: the person confirmed this change (a preview); opts.extra: more audit details.
+export async function updateTasks(input, actor, ip, opts) {
+  const { origin } = opts;
   const people = await teamPeople();
   const adding = resolvePeople(input.add_assignees, people, actor);
   const removing = resolvePeople(input.remove_assignees, people, actor);
@@ -355,12 +354,24 @@ export async function updateTasks(input, actor, ip, { origin }) {
   // Nothing changes while a name or label is unclear: ask, then try again.
   if (missing.length) return { changed: false, missing };
   const why = confirmationReasons({ count: input.task_ids.length, removesOthers: removing.ids.some((u) => u !== actor.id) });
-  if (why.length) return { changed: false, needs_confirmation: why };
+  if (why.length && !opts.confirmed) {
+    const names = await namesById();
+    const changes = {};
+    for (const k of ['status', 'priority', 'due_date', 'title', 'description', 'team_task']) if (input[k] !== undefined) changes[k] = input[k];
+    if (adding.ids.length) changes.add_assignees = adding.ids.map((u) => names[u]);
+    if (removing.ids.length) changes.remove_assignees = removing.ids.map((u) => names[u]);
+    const labelOut = (list) => list.map((lid) => labelName(labels.find((l) => l.id === lid), actor.lang));
+    if (labelsIn.ids.length) changes.add_labels = labelOut(labelsIn.ids);
+    if (labelsOut.ids.length) changes.remove_labels = labelOut(labelsOut.ids);
+    const summary = { kind: 'update', count: input.task_ids.length, tasks: await titles(input.task_ids), changes };
+    return { changed: false, why, preview: await createPreview('update', input, summary, actor, origin) };
+  }
 
   const editing = input.priority !== undefined || input.due_date !== undefined || input.title !== undefined
     || input.description !== undefined || input.team_task !== undefined
     || adding.ids.length > 0 || removing.ids.length > 0 || labelsIn.ids.length > 0 || labelsOut.ids.length > 0;
   const batch = randomUUID();
+  const tag = { batch, via: VIA, ...opts.extra };
   const skipped = { missing: [], not_allowed: [], closed: [] };
   const updated = [];
   await tx(async (db) => {
@@ -376,13 +387,13 @@ export async function updateTasks(input, actor, ip, { origin }) {
         const to = STATUS_IN[input.status];
         if (current.closed_at) {
           // A status on a closed task reopens it, as moving it on the board does.
-          await reopenInside(db, current, actor, ip, to, { batch, via: VIA });
-          await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: 'done', to, batch, via: VIA }, ip });
+          await reopenInside(db, current, actor, ip, to, tag);
+          await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: 'done', to, ...tag }, ip });
           current.closed_at = null;
           touched = true;
         } else if (current.status !== to) {
           await db.query('UPDATE tasks SET status = $2, updated_at = now() WHERE id = $1', [id, to]);
-          await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: current.status, to, batch, via: VIA }, ip });
+          await audit(db, { actorId: actor.id, action: 'task.moved', taskId: id, details: { from: current.status, to, ...tag }, ip });
           touched = true;
         }
         if (touched && to === 'review') review.push({ task: current, userIds: [current.creator_id] });
@@ -404,8 +415,8 @@ export async function updateTasks(input, actor, ip, { origin }) {
             labels: [...labelIds.filter((l) => !labelsOut.ids.includes(l)), ...labelsIn.ids.filter((l) => !labelIds.includes(l))],
             assignees: nextAssignees,
             team_task: input.team_task ?? current.team_task,
-          }, actor, ip, { batch, via: VIA });
-          if (changed && adding.ids.some((u) => !assigned.includes(u))) await settleNoAssignee(db, id, actor, ip, { batch, via: VIA });
+          }, actor, ip, tag);
+          if (changed && adding.ids.some((u) => !assigned.includes(u))) await settleNoAssignee(db, id, actor, ip, tag);
           touched = touched || changed;
         }
       }
@@ -420,15 +431,24 @@ export async function updateTasks(input, actor, ip, { origin }) {
 }
 
 // input: { task_ids, reason, credit: [names], duplicate_of }
-export async function closeTasks(input, actor, ip, { origin }) {
+export async function closeTasks(input, actor, ip, opts) {
+  const { origin } = opts;
   const reason = REASON_IN[input.reason];
   if (reason === 'duplicate' && input.task_ids.length > 1) throw new HttpError(400, 'one duplicate at a time');
   const credit = resolvePeople(input.credit, await teamPeople(), actor);
   if (credit.missing.length) return { changed: false, missing: credit.missing };
   const why = confirmationReasons({ count: input.task_ids.length });
-  if (why.length) return { changed: false, needs_confirmation: why };
+  if (why.length && !opts.confirmed) {
+    const names = await namesById();
+    const summary = {
+      kind: 'close', count: input.task_ids.length, tasks: await titles(input.task_ids), reason: input.reason,
+      credit: credit.ids.map((u) => names[u]), duplicate_of: input.duplicate_of ?? null,
+    };
+    return { changed: false, why, preview: await createPreview('close', input, summary, actor, origin) };
+  }
 
   const batch = randomUUID();
+  const tag = { batch, via: VIA, ...opts.extra };
   const result = await tx(async (db) => {
     const { rows: found } = await db.query('SELECT * FROM tasks WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE', [input.task_ids]);
     const foundIds = new Set(found.map((t) => t.id));
@@ -464,14 +484,14 @@ export async function closeTasks(input, actor, ip, { origin }) {
         [t.id, actor.id, reason, dup],
       );
       if (people.length) await db.query('INSERT INTO task_credits (task_id, user_id) SELECT $1, unnest($2::uuid[])', [t.id, people]);
-      await audit(db, { actorId: actor.id, action: 'task.closed', taskId: t.id, details: { reason, credited: people, duplicate_of: dup, batch, via: VIA }, ip });
+      await audit(db, { actorId: actor.id, action: 'task.closed', taskId: t.id, details: { reason, credited: people, duplicate_of: dup, ...tag }, ip });
       if (reason === 'mistake' || reason === 'duplicate') {
         const settled = await db.query(
           `UPDATE flags SET resolved_at = now(), resolved_by = $2, resolution = 'closed' WHERE task_id = $1 AND resolved_at IS NULL RETURNING id`,
           [t.id, actor.id],
         );
         for (const f of settled.rows) {
-          await audit(db, { actorId: actor.id, action: 'task.flag_resolved', taskId: t.id, details: { flag_id: f.id, resolution: 'closed', batch, via: VIA }, ip });
+          await audit(db, { actorId: actor.id, action: 'task.flag_resolved', taskId: t.id, details: { flag_id: f.id, resolution: 'closed', ...tag }, ip });
         }
       }
       if (people.length) credited.push({ task: t, userIds: people });
@@ -561,3 +581,71 @@ export async function teamOverview(actor, { timezone, wipLimit }) {
     in_progress: { now: await inProgressCount(), limit: await getWipLimit(wipLimit) },
   };
 }
+
+// ---------- adding tasks ----------
+
+const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'into', 'our', 'need', 'needs', 'some', 'all']);
+const titleWords = (s) => [...new Set(normaliseName(s).split(' ').filter((w) => w.length >= 3 && !STOP.has(w)))];
+
+// How alike two titles are: 1 for the same words, otherwise the share of
+// words in common when at least two are (0 when fewer).
+export function alike(title, other) {
+  if (normaliseName(title) === normaliseName(other)) return 1;
+  const a = titleWords(title);
+  const b = new Set(titleWords(other));
+  if (a.length === 0 || b.size === 0) return 0;
+  const shared = a.filter((w) => b.has(w)).length;
+  return shared >= 2 ? shared / Math.max(a.length, b.size) : 0;
+}
+
+// For each new task, up to three open tasks with a similar title.
+async function similarOpen(created, actor, origin) {
+  const { rows } = await q(
+    'SELECT id, title FROM tasks WHERE closed_at IS NULL AND NOT (id = ANY($1::int[])) ORDER BY id DESC LIMIT 2000',
+    [created.map((c) => c.id)],
+  );
+  const picks = new Map();
+  for (const c of created) {
+    picks.set(c.id, rows.map((r) => ({ id: r.id, score: alike(c.title, r.title) }))
+      .filter((m) => m.score >= 0.5).sort((x, y) => y.score - x.score || y.id - x.id).slice(0, 3).map((m) => m.id));
+  }
+  const ids = [...new Set([...picks.values()].flat())];
+  if (ids.length === 0) return new Map();
+  const full = new Map((await q(`SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE t.id = ANY($1::int[])`, [ids])).rows
+    .map((r) => [r.id, taskRow(r, actor.lang, origin)]));
+  return new Map([...picks].map(([id, list]) => [id, list.map((m) => full.get(m))]));
+}
+
+// data: { source, tasks } as validated. More than MAX_ADD tasks wait for confirmation.
+export async function addTasks(data, actor, ip, opts) {
+  const { origin } = opts;
+  if (data.tasks.length > MAX_ADD && !opts.confirmed) {
+    const people = await teamPeople();
+    const names = await namesById();
+    const summary = {
+      kind: 'create',
+      count: data.tasks.length,
+      tasks: data.tasks.map((t) => {
+        const who = resolveNames(t.assignees, people).ids;
+        if (t.assign_to_me && !who.includes(actor.id)) who.unshift(actor.id);
+        return {
+          title: t.title, assignees: who.map((u) => names[u]), status: t.started ? 'in_progress' : 'todo', priority: t.priority, due_date: t.due_date ?? null,
+        };
+      }),
+    };
+    return { changed: false, why: [`more than ${MAX_ADD} new tasks at once`], preview: await createPreview('create', data, summary, actor, origin) };
+  }
+  const result = await captureTasks(data.tasks, actor, ip, { source: data.source, origin, extra: opts.extra || {} });
+  const similar = await similarOpen(result.tasks, actor, origin);
+  for (const t of result.tasks) {
+    const list = similar.get(t.id) || [];
+    if (list.length) t.similar = list;
+  }
+  if (result.tasks.some((t) => t.status === 'in_progress')) {
+    const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(opts.wipLimit)]);
+    if (count > limit) result.warning = `In progress now has ${count} tasks, over the team's limit of ${limit}. The tasks were still added.`;
+  }
+  return result;
+}
+
+export const createFromPreview = (payload, actor, ip, opts) => addTasks(payload, actor, ip, opts);

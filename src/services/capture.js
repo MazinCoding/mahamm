@@ -93,6 +93,18 @@ export async function settleNoAssignee(db, id, actor, ip, extra = {}) {
   return settled.length;
 }
 
+// Label names (English or Arabic) to label ids; unknown names are reported.
+export function resolveLabels(names, labels) {
+  const ids = [];
+  const missing = [];
+  for (const heard of names) {
+    const h = normaliseName(heard);
+    const hit = labels.find((l) => normaliseName(l.name_en) === h || normaliseName(l.name_ar) === h);
+    if (hit) { if (!ids.includes(hit.id)) ids.push(hit.id); } else missing.push({ heard, problem: 'no_such_label' });
+  }
+  return { ids, missing };
+}
+
 export function summary(task, origin) {
   return {
     id: task.id,
@@ -107,30 +119,34 @@ export function summary(task, origin) {
   };
 }
 
-// items: [{ title, assignees: [names], assign_to_me, started, team_task, priority, due_date }]
-export async function captureTasks(items, actor, ip, { source = 'text', origin }) {
+// items: [{ title, description, labels: [names], assignees: [names], assign_to_me, started, team_task, priority, due_date }]
+export async function captureTasks(items, actor, ip, { source = 'text', origin, extra = {} }) {
   const batch = randomUUID();
   const t = translator(actor.lang);
   const created = await tx(async (db) => {
     const people = await teamPeople(db);
+    const labels = (await db.query('SELECT id, name_en, name_ar FROM labels')).rows;
     const out = [];
     const notices = [];
     for (const item of items) {
       const { ids, missing } = resolveNames(item.assignees, people);
+      const tags = resolveLabels(item.labels || [], labels);
+      missing.push(...tags.missing);
       if (item.assign_to_me && !ids.includes(actor.id)) ids.unshift(actor.id);
       const status = item.started ? 'progress' : 'todo';
       const { rows } = await db.query(
         `INSERT INTO tasks (title, description, status, priority, due_date, creator_id, team_task)
-         VALUES ($1, '', $2, $3, $4, $5, $6) RETURNING id, title`,
-        [item.title, status, PRIORITY_IN[item.priority] || 'med', item.due_date || null, actor.id, item.team_task],
+         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, title`,
+        [item.title, item.description || '', status, PRIORITY_IN[item.priority] || 'med', item.due_date || null, actor.id, item.team_task],
       );
       const task = rows[0];
       if (ids.length) await db.query('INSERT INTO task_assignees (task_id, user_id) SELECT $1, unnest($2::uuid[])', [task.id, ids]);
+      if (tags.ids.length) await db.query('INSERT INTO task_labels (task_id, label_id) SELECT $1, unnest($2::int[])', [task.id, tags.ids]);
       await audit(db, {
-        actorId: actor.id, action: 'task.created', taskId: task.id, details: { title: task.title, batch, via: 'connector', source }, ip,
+        actorId: actor.id, action: 'task.created', taskId: task.id, details: { title: task.title, batch, via: 'connector', source, ...extra }, ip,
       });
       if (status === 'progress' && ids.length === 0) {
-        const heard = missing.map((m) => m.heard);
+        const heard = missing.filter((m) => m.problem !== 'no_such_label').map((m) => m.heard);
         const note = heard.length
           ? t('connector.noAssigneeSuggested', { names: heard.join(t('common.listSep')), where: t(`connector.${source}`) })
           : t('connector.noAssignee');

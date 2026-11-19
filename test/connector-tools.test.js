@@ -235,7 +235,7 @@ describe('connector tools: changing', () => {
     assert.equal((await taskRow(id)).closed_at, null);
   });
 
-  test('update_tasks: big changes wait for confirmation, unclear names change nothing, taking yourself off is fine', async () => {
+  test('update_tasks: big changes wait for a confirmation, unclear names change nothing, taking yourself off is fine', async () => {
     const me = await person('Hamad');
     const other = await person('Nasser');
     const token = await connectApp(app, me, RETURN);
@@ -244,12 +244,13 @@ describe('connector tools: changing', () => {
 
     const many = await ok(token, 'update_tasks', { task_ids: ids, priority: 'high' });
     assert.equal(many.changed, false);
-    assert.ok(many.needs_confirmation.length > 0);
-    assert.match(many.message, /confirmation/);
+    assert.equal(many.waiting_for_confirmation, true);
+    assert.equal(many.preview.kind, 'update');
+    assert.match(many.message, /confirm/);
     assert.equal((await taskRow(ids[0])).priority, 'med');
     const off = await ok(token, 'update_tasks', { task_ids: [ids[0]], remove_assignees: [other.name] });
     assert.equal(off.changed, false);
-    assert.ok(off.needs_confirmation.length > 0);
+    assert.equal(off.waiting_for_confirmation, true);
     const unknown = await ok(token, 'update_tasks', { task_ids: [ids[0]], add_assignees: ['Nobody Unheardof'] });
     assert.equal(unknown.changed, false);
     assert.deepEqual(unknown.missing, [{ heard: 'Nobody Unheardof', problem: 'nobody_by_that_name' }]);

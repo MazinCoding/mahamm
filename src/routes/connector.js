@@ -1,16 +1,17 @@
 import express from 'express';
 import { SCOPES, verifyAccessToken } from '../oauth.js';
 import { enforce } from '../ratelimit.js';
-import { captureTasks, updateCaptured } from '../services/capture.js';
+import { updateCaptured } from '../services/capture.js';
 import {
-  MAX_DIRECT, activity, closeTasks, comment, flag, joinOne, markRead, myWork, searchTasks, taskInFull, teamOverview,
-  undoAny, updateTasks, workload,
+  MAX_ADD, MAX_DIRECT, activity, addTasks, closeTasks, comment, flag, joinOne, markRead, myWork, searchTasks, taskInFull,
+  teamOverview, undoAny, updateTasks, workload,
 } from '../services/connector.js';
-import { getWipLimit, inProgressCount } from '../services/settings.js';
+import { PREVIEW_MINUTES, adminPreview, cancelPreview, confirmPreview } from '../services/previews.js';
 import { HttpError } from '../services/tasks.js';
 import {
-  captureSchema, connectorActivitySchema, connectorCloseSchema, connectorCommentSchema, connectorFlagSchema, connectorReadSchema,
-  connectorSearchSchema, connectorTaskSchema, connectorUndoSchema, connectorUpdateManySchema, connectorUpdateSchema, parse,
+  captureSchema, connectorActivitySchema, connectorAdminSchema, connectorCancelSchema, connectorCloseSchema, connectorCommentSchema,
+  connectorConfirmSchema, connectorFlagSchema, connectorReadSchema, connectorSearchSchema, connectorTaskSchema, connectorUndoSchema,
+  connectorUpdateManySchema, connectorUpdateSchema, parse,
 } from '../validation.js';
 
 // The connector: a small JSON-RPC 2.0 endpoint (Streamable HTTP, stateless,
@@ -38,6 +39,7 @@ const INSTRUCTIONS = `Mahamm is the team's task board, in English and Arabic. St
 Capture work as tasks the moment someone mentions it, in a voice note or plain words: add them straight away with create_tasks and never ask for confirmation first. Capturing the task quickly matters more than complete details.
 Read before you answer: my_work for "what's on my plate", search_tasks to find tasks, get_task for one task's details and history, workload for who is busy or has room, get_activity for what happened (stand-ups, weekly reports, "who closed it").
 Change tasks with update_tasks (move, edit, reopen), close_tasks (done, with credit to whoever did the work), join_task, add_comment and flag_task. Every change returns a batch id that undo takes back: one minute for added tasks, ten minutes for other changes. After a change, say briefly what changed and that it can be undone.
+Big changes are not made straight away: more than ${MAX_DIRECT} tasks at once, taking someone else off a task, more than ${MAX_ADD} new tasks at once, and admin changes come back as a preview waiting for the person to confirm. Tell them what it will do and that they confirm it on the card or at the link; you can't confirm it for them.
 When someone names a task by its title, search first. If more than one task could match, ask which one; never act on a guess.
 If a name matched several people or nobody, or a date was unclear, ask one short question and apply the answer.
 Show missing information as missing: say "no due date", "unassigned" or "nobody yet" instead of guessing.
@@ -141,8 +143,11 @@ const TOOLS = [
       '- team_task: true when they say "we" are doing it together. Team tasks are shown to others first so they can join.',
       '- priority: high or low only if they said so; otherwise medium.',
       '- due_date: only if a date was said and is clear; leave it out otherwise.',
+      '- description and labels (English or Arabic names): only when the person gave them.',
       'Set source to "voice" for a voice note.',
-      'The result lists, per task, any name that matched nobody or several people under "missing". Ask the person about those, then use update_tasks. The batch id can undo the whole message for one minute.',
+      'The result lists, per task, any name or label that matched nothing under "missing". Ask the person about names, then use update_tasks. The batch id can undo the whole message for one minute.',
+      'A task with "similar" open tasks may be a repeat: mention them and offer to undo and join one instead.',
+      `More than ${MAX_ADD} tasks at once (from meeting notes or a sheet, say) come back as a preview for the person to confirm; nothing is added until they do.`,
     ].join('\n'),
     inputSchema: {
       type: 'object',
@@ -151,11 +156,13 @@ const TOOLS = [
         tasks: {
           type: 'array',
           minItems: 1,
-          maxItems: 10,
+          maxItems: 50,
           items: {
             type: 'object',
             properties: {
               title: { type: 'string', minLength: 1, maxLength: 200 },
+              description: { type: 'string', maxLength: 10000 },
+              labels: { type: 'array', items: { type: 'string', maxLength: 40 }, maxItems: 10 },
               assignees: { type: 'array', items: { type: 'string', maxLength: 100 }, maxItems: 10 },
               assign_to_me: { type: 'boolean' },
               started: { type: 'boolean' },
@@ -181,7 +188,7 @@ const TOOLS = [
       '- status: move between backlog, todo, in_progress and review. Anyone can change status. A status on a closed task reopens it. Moving to review tells the task\'s creator.',
       '- priority, due_date (null clears it), team_task, add_assignees, remove_assignees, add_labels, remove_labels (label names in English or Arabic): need the person to be the task\'s creator, an assignee or an admin; tasks they can\'t edit are listed under skipped.not_allowed.',
       '- title and description: one task at a time.',
-      `Up to ${MAX_DIRECT} tasks at once. More than that, or taking someone other than the person themselves off a task, needs their confirmation and is not done here.`,
+      `Up to ${MAX_DIRECT} tasks at once are changed straight away. More than that, or taking someone other than the person themselves off a task, comes back as a preview for the person to confirm.`,
       'Names or labels that match nothing are returned under "missing" and nothing is changed: ask, then call again.',
       'Use close_tasks to mark tasks done.',
     ].join('\n'),
@@ -207,7 +214,7 @@ const TOOLS = [
       'Close tasks, as "Done…" does on the website. Anyone can close a task.',
       '- reason: completed (the work was done), not_needed, duplicate (one task at a time; give duplicate_of when known) or mistake (created by mistake).',
       '- credit: who actually did the work, as named ("me" for the person you act for). If left out, the task\'s assignees are credited. Completed needs someone credited: if a task has nobody, nothing is closed and the result lists it under needs_credit, so ask who did it.',
-      `Up to ${MAX_DIRECT} tasks at once. Undo reopens them within ten minutes.`,
+      `Up to ${MAX_DIRECT} tasks at once are closed straight away; more come back as a preview for the person to confirm. Undo reopens them within ten minutes.`,
     ].join('\n'),
     inputSchema: object({
       task_ids: ids,
@@ -268,6 +275,33 @@ const TOOLS = [
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
+  {
+    name: 'admin_change',
+    title: 'Admin change',
+    description: 'For admins only: add a person who has no account yet (so tasks can be assigned and credited to them), or set the team\'s in-progress limit (1 to 50). Always comes back as a preview for the admin to confirm. Invites, roles and accounts stay on the website.',
+    inputSchema: object({
+      action: { type: 'string', enum: ['add_person', 'set_in_progress_limit'] },
+      name: { type: 'string', maxLength: 100 },
+      limit: { type: 'integer', minimum: 1, maximum: 50 },
+    }, ['action']),
+    annotations: WRITE,
+  },
+  {
+    name: 'confirm_preview',
+    title: 'Confirm',
+    description: 'Carries out a change after the person pressed Confirm on its card.',
+    inputSchema: object({ preview_id: { type: 'string', format: 'uuid' }, secret: { type: 'string', maxLength: 100 } }, ['preview_id', 'secret']),
+    annotations: WRITE,
+    _meta: { ui: { visibility: ['app'] } },
+  },
+  {
+    name: 'cancel_preview',
+    title: 'Cancel',
+    description: 'Drops a change after the person pressed Cancel on its card.',
+    inputSchema: object({ preview_id: { type: 'string', format: 'uuid' } }, ['preview_id']),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    _meta: { ui: { visibility: ['app'] } },
+  },
 ];
 
 const ok = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data });
@@ -294,12 +328,18 @@ function todayIn(timezone) {
   };
 }
 
-// A change that needs the person's confirmation is not made here.
-const confirmFirst = (why) => ok({
-  changed: false,
-  needs_confirmation: why,
-  message: `Nothing was changed: ${why.join(' and ')} needs the person's confirmation, which isn't available here yet. Suggest doing it from the website's table.`,
-});
+// A change that waits for the person's confirmation. The secret for the
+// card's Confirm button goes in _meta, which is for the card, not the text.
+function previewResult({ why, preview }) {
+  const { secret, ...shown } = preview;
+  const data = {
+    changed: false,
+    waiting_for_confirmation: true,
+    preview: shown,
+    message: `Nothing has changed yet: ${(why || ['this change']).join(' and ')} needs the person's confirmation. Tell them what it will do and ask them to press Confirm on the card, or to open ${shown.confirm_url} (it works for ${PREVIEW_MINUTES} minutes).`,
+  };
+  return { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: data, _meta: { 'mahamm/confirm': { preview_id: shown.id, secret } } };
+}
 
 async function callTool(config, name, args, ctx) {
   const { user, ip } = ctx;
@@ -309,10 +349,16 @@ async function callTool(config, name, args, ctx) {
     if (errors) return inputProblem(errors);
     try {
       const result = await fn(data);
-      if (result?.needs_confirmation) return confirmFirst(result.needs_confirmation);
+      if (result?.preview) return previewResult(result);
       return ok(result);
     } catch (err) {
-      if (err instanceof HttpError) return httpProblem(err, data.task_id ?? (data.task_ids?.length === 1 ? data.task_ids[0] : null));
+      if (err instanceof HttpError) {
+        if (err.message === 'admins only') return toolError('Only admins can do that.');
+        if (err.message === 'preview not found') return toolError('There is no such change waiting for this person.');
+        if (err.message === 'not confirmed by the person') return toolError('Only the Confirm button on the card can confirm this change.');
+        if (err.message === 'name taken') return toolError('Someone active already has that name.');
+        return httpProblem(err, data.task_id ?? (data.task_ids?.length === 1 ? data.task_ids[0] : null));
+      }
       throw err;
     }
   };
@@ -325,16 +371,7 @@ async function callTool(config, name, args, ctx) {
     case 'get_task': return run(connectorTaskSchema, (d) => taskInFull(d.task_id, user, opts));
     case 'workload': return ok(await workload(user, opts));
     case 'get_activity': return run(connectorActivitySchema, (d) => activity(d, user, opts));
-    case 'create_tasks': {
-      const { data, errors } = parse(captureSchema, args);
-      if (errors) return inputProblem(errors);
-      const result = await captureTasks(data.tasks, user, ip, { source: data.source, origin: config.origin });
-      if (result.tasks.some((t) => t.status === 'in_progress')) {
-        const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(config.wipLimit)]);
-        if (count > limit) result.warning = `In progress now has ${count} tasks, over the team's limit of ${limit}. The tasks were still added.`;
-      }
-      return ok(result);
-    }
+    case 'create_tasks': return run(captureSchema, (d) => addTasks(d, user, ip, opts));
     case 'update_tasks': return run(connectorUpdateManySchema, (d) => updateTasks(d, user, ip, opts));
     // Earlier name, kept for conversations that still use it.
     case 'update_task': {
@@ -354,6 +391,9 @@ async function callTool(config, name, args, ctx) {
     case 'add_comment': return run(connectorCommentSchema, (d) => comment(d, user, ip, opts));
     case 'flag_task': return run(connectorFlagSchema, (d) => flag(d, user, ip));
     case 'mark_read': return run(connectorReadSchema, (d) => markRead(d, user));
+    case 'admin_change': return run(connectorAdminSchema, (d) => adminPreview(d, user, opts));
+    case 'confirm_preview': return run(connectorConfirmSchema, (d) => confirmPreview(d.preview_id, user, ip, opts, { secret: d.secret }));
+    case 'cancel_preview': return run(connectorCancelSchema, (d) => cancelPreview(d.preview_id, user));
     case 'undo':
     case 'undo_created_tasks': {
       const { data, errors } = parse(connectorUndoSchema, args);
