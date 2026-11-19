@@ -6,6 +6,7 @@ import { notifyBatch } from '../notify.js';
 import {
   captureTasks, matchPerson, normaliseName, resolveLabels, resolveNames, settleNoAssignee, teamPeople, undoCapture,
 } from './capture.js';
+import { alike, mergeIntoMatch, openCloseMatch } from './matches.js';
 import { createPreview } from './previews.js';
 import { getWipLimit, inProgressCount } from './settings.js';
 import {
@@ -223,6 +224,7 @@ export async function taskInFull(id, actor, { timezone, origin }) {
       id: f.id, reason: f.reason, note: f.note, by: f.flagged_by_name, at: localTime(f.created_at, timezone), open: !f.resolved_at, resolution: f.resolution || null,
     })),
     history: d.events.slice(-30).map((e) => ({ at: localTime(e.at, timezone), who: e.actor_name || t('common.formerUser'), text: describe(e, t, { names, labels }) })),
+    close_match: task.closed_at ? null : await closeMatchOf(id, actor, origin),
   };
 }
 
@@ -604,20 +606,6 @@ export async function teamOverview(actor, { timezone, wipLimit }) {
 
 // ---------- adding tasks ----------
 
-const STOP = new Set(['the', 'and', 'for', 'with', 'from', 'this', 'that', 'into', 'our', 'need', 'needs', 'some', 'all']);
-const titleWords = (s) => [...new Set(normaliseName(s).split(' ').filter((w) => w.length >= 3 && !STOP.has(w)))];
-
-// How alike two titles are: 1 for the same words, otherwise the share of
-// words in common when at least two are (0 when fewer).
-export function alike(title, other) {
-  if (normaliseName(title) === normaliseName(other)) return 1;
-  const a = titleWords(title);
-  const b = new Set(titleWords(other));
-  if (a.length === 0 || b.size === 0) return 0;
-  const shared = a.filter((w) => b.has(w)).length;
-  return shared >= 2 ? shared / Math.max(a.length, b.size) : 0;
-}
-
 // For each new task, up to three open tasks with a similar title.
 async function similarOpen(created, actor, origin) {
   const { rows } = await q(
@@ -627,7 +615,7 @@ async function similarOpen(created, actor, origin) {
   const picks = new Map();
   for (const c of created) {
     picks.set(c.id, rows.map((r) => ({ id: r.id, score: alike(c.title, r.title) }))
-      .filter((m) => m.score >= 0.5).sort((x, y) => y.score - x.score || y.id - x.id).slice(0, 3).map((m) => m.id));
+      .filter((m) => m.score >= 0.5 && m.id !== c.close_match_id).sort((x, y) => y.score - x.score || y.id - x.id).slice(0, 3).map((m) => m.id));
   }
   const ids = [...new Set([...picks.values()].flat())];
   if (ids.length === 0) return new Map();
@@ -660,6 +648,13 @@ export async function addTasks(data, actor, ip, opts) {
   for (const t of result.tasks) {
     const list = similar.get(t.id) || [];
     if (list.length) t.similar = list;
+    // A close match is flagged on the new task and shown in full, so the person can merge them.
+    if (t.close_match_id) {
+      const [row] = (await q(`SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE t.id = $1`, [t.close_match_id])).rows;
+      if (row) t.close_match = { flag_id: t.close_match_flag, task: closeMatchRow(row, actor, origin) };
+    }
+    delete t.close_match_id;
+    delete t.close_match_flag;
   }
   if (result.tasks.some((t) => t.status === 'in_progress')) {
     const [count, limit] = await Promise.all([inProgressCount(), getWipLimit(opts.wipLimit)]);
@@ -669,6 +664,28 @@ export async function addTasks(data, actor, ip, opts) {
 }
 
 export const createFromPreview = (payload, actor, ip, opts) => addTasks(payload, actor, ip, opts);
+
+// ---------- close matches ----------
+
+function closeMatchRow(row, actor, origin) {
+  const out = taskRow(row, actor.lang, origin);
+  if (row.closed_at) out.closed_on = String(row.closed_at instanceof Date ? row.closed_at.toISOString() : row.closed_at).slice(0, 10);
+  return out;
+}
+
+// The older task a task closely matches, while its close-match flag is open.
+export async function closeMatchOf(taskId, actor, origin) {
+  const found = await openCloseMatch(taskId);
+  if (!found) return null;
+  const [row] = (await q(`SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE t.id = $1`, [found.match_id])).rows;
+  return row ? { flag_id: found.flag_id, task: closeMatchRow(row, actor, origin) } : null;
+}
+
+export async function mergeTask(id, actor, ip, { origin }) {
+  const result = await mergeIntoMatch(id, actor, ip, { via: VIA });
+  const [row] = (await q(`SELECT ${CARD_COLUMNS} ${CARD_FROM} WHERE t.id = $1`, [result.into])).rows;
+  return { ...result, task: taskRow(row, actor.lang, origin) };
+}
 
 // ---------- skills, suggestions and taking a task ----------
 
