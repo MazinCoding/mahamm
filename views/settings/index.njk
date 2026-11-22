@@ -1,7 +1,7 @@
 {% extends "layout.njk" %}
 {% block title %}{{ t('settings.title') }}{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{{ t('settings.title') }}</h1><p class="sub" dir="ltr">{{ me.email }}</p></div></div>
+<div class="page-head"><div><h1>{{ t('settings.title') }}</h1><p class="sub" dir="ltr">{{ me.email }}</p><p class="hint">{{ t('settings.yourLevel', { level: t('role.' + user.role) }) }}</p></div></div>
 
 <section class="card-form">
   <h2 class="section-title">{{ t('settings.profile') }}</h2>

@@ -4,7 +4,7 @@ import { q, tx } from '../db.js';
 import { translator } from '../i18n.js';
 import { notify } from '../notify.js';
 import { normaliseName } from './capture.js';
-import { HttpError, UNDO_MINUTES, addComment, canEdit, canResolveFlags, lockTask } from './tasks.js';
+import { HttpError, UNDO_MINUTES, addComment, assertCanClose, canEdit, canResolveFlags, lockTask } from './tasks.js';
 
 // Close matches: a new task whose title says nearly the same as an older task
 // that is open or was closed in the last few days. The new task is still added
@@ -85,6 +85,7 @@ export async function openCloseMatch(taskId, db = { query: q }) {
 // mentioning anyone who wasn't added. One batch, so Undo takes it all back.
 // Allowed for the new task's creator or an admin, as settling its flag is.
 export async function mergeIntoMatch(newId, actor, ip, extra = {}) {
+  assertCanClose(actor);
   const batch = randomUUID();
   const tag = { batch, ...extra };
   const merged = await tx(async (db) => {

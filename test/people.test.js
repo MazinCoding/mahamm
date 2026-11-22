@@ -13,7 +13,8 @@ let memberAgent;
 
 before(async () => {
   ({ app, sent } = await setup());
-  admin = await createUser({ name: 'Mazin Admin', role: 'admin', twoFactor: true });
+  // An executive, so invites can carry the Admin level (see src/roles.js).
+  admin = await createUser({ name: 'Mazin Admin', role: 'executive', twoFactor: true });
   member = await createUser({ name: 'Aisha Member' });
   adminAgent = await signIn(app, admin);
   memberAgent = await signIn(app, member);
@@ -89,10 +90,11 @@ describe('adding people without accounts', () => {
     assert.equal((await q('SELECT name FROM users WHERE id = $1', [member.id])).rows[0].name, 'Aisha Member');
   });
 
-  test('their role cannot be changed and no reset link can be made for them', async () => {
+  test('their level can be set before they join, but no reset link can be made for them', async () => {
     const person = await addPerson('Rashid No Role');
     await post(adminAgent, `/people/${person.id}/role`, { role: 'admin' }, '/people');
-    assert.equal((await q('SELECT role FROM users WHERE id = $1', [person.id])).rows[0].role, 'member');
+    assert.equal((await q('SELECT role FROM users WHERE id = $1', [person.id])).rows[0].role, 'admin');
+    assert.equal((await q('SELECT email_notifications FROM users WHERE id = $1', [person.id])).rows[0].email_notifications, false);
     assert.equal((await post(adminAgent, `/people/${person.id}/reset-link`, {}, '/people')).status, 404);
     assert.equal((await q('SELECT count(*)::int AS n FROM password_resets WHERE user_id = $1', [person.id])).rows[0].n, 0);
   });
@@ -100,6 +102,7 @@ describe('adding people without accounts', () => {
   test('the database refuses half an account', async () => {
     await assert.rejects(q(`INSERT INTO users (name, email) VALUES ('Half Account', 'half@example.com')`));
     await assert.rejects(q(`INSERT INTO users (name, role) VALUES ('Admin Without Account', 'admin')`));
+    await assert.rejects(q(`INSERT INTO users (name, role, email_notifications) VALUES ('Owner Without Account', 'superadmin', false)`));
   });
 });
 

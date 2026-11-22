@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { INVITE_ROLES } from './roles.js';
 
 // Strip control characters, normalise line endings, trim.
 export function clean(value) {
@@ -123,12 +124,13 @@ export const flagSchema = z.object({
 
 export const emailField = z.preprocess((v) => cleanLine(v).toLowerCase(), z.string().max(254).email());
 
-export const inviteSchema = z.object({ email: emailField, role: z.enum(['admin', 'member']) });
+export const inviteSchema = z.object({ email: emailField, role: z.enum(INVITE_ROLES) });
+export const roleSchema = z.object({ role: z.enum(INVITE_ROLES) });
 
 export const nameField = z.preprocess(cleanLine, z.string().min(1).max(100));
 
 // A person without an account: just a name.
-export const personSchema = z.object({ name: nameField });
+export const personSchema = z.object({ name: nameField, role: z.enum(INVITE_ROLES).optional() });
 
 export const labelSchema = z.object({
   name_en: z.preprocess(cleanLine, z.string().min(1).max(40)),

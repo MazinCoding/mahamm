@@ -64,8 +64,11 @@
     "mistake": "It shouldn’t have been created."
   },
   "role": {
+    "superadmin": "Superadmin",
+    "executive": "Executive",
     "admin": "Admin",
-    "member": "Member"
+    "member": "Member",
+    "trainee": "Trainee"
   },
   "field": {
     "title": "Title",
@@ -371,7 +374,7 @@
     "invited": "invited {email} as {role}",
     "inviteRevoked": "cancelled the invite for {email}",
     "inviteAccepted": "accepted their invite",
-    "roleChanged": "changed {person}’s role to {role}",
+    "roleChanged": "changed {person}’s level to {role}",
     "userDisabled": "disabled {person}’s account",
     "userEnabled": "re-enabled {person}’s account",
     "resetLink": "created a password reset link for {person}",
@@ -393,7 +396,8 @@
     "appDisconnected": "disconnected an app ({app})",
     "appsDisconnected": "disconnected all apps ({count})",
     "teamTaskOn": "made a team task",
-    "teamTaskOff": "no longer a team task"
+    "teamTaskOff": "no longer a team task",
+    "personAddedAs": "added {name} without an account, as {role}"
   },
   "act": {
     "task": {
@@ -429,7 +433,7 @@
     },
     "user": {
       "invited": "Invite sent",
-      "role_changed": "Role changed",
+      "role_changed": "Level changed",
       "disabled": "Account disabled",
       "enabled": "Account enabled",
       "reset_link_created": "Reset link"
@@ -495,7 +499,7 @@
     "title": "People",
     "sub": "Only admins can see this page. People can only join by invitation.",
     "email": "Work email",
-    "role": "Role",
+    "role": "Level",
     "invite": "Send invite",
     "inviteHint": "The invite link works once and expires after 72 hours.",
     "noMail": "Email isn’t set up yet, so you’ll get the link to send yourself.",
@@ -520,16 +524,16 @@
     "confirmDisable": "Disable {name}’s account? They will be signed out straight away.",
     "disable": "Disable",
     "enable": "Re-enable",
-    "confirmRole": "Change this person’s role?",
+    "confirmRole": "Change this person’s level?",
     "badEmail": "Enter a valid work email.",
     "alreadyMember": "That person already has an account.",
     "inviteCreated": "Invite created",
     "inviteEmailed": "We emailed the invite to {email}. You can also send them this link yourself.",
     "inviteNotEmailed": "Email isn’t set up yet. Send this link to {email} yourself, for example on WhatsApp.",
     "inviteRevoked": "Invite cancelled.",
-    "lastAdmin": "There must always be at least one active admin.",
+    "lastAdmin": "There must always be at least one active admin with an account.",
     "notYourself": "You can’t do that to your own account.",
-    "roleChanged": "Role changed.",
+    "roleChanged": "Level changed.",
     "disabled": "Account disabled and signed out.",
     "enabled": "Account re-enabled.",
     "resetCreated": "Password reset link",
@@ -540,7 +544,7 @@
     "addTitle": "Add someone without an account",
     "name": "Name",
     "add": "Add person",
-    "addHint": "For people who don’t have an account yet. You can assign tasks to them and credit them straight away, and invite them later.",
+    "addHint": "For people who don’t have an account yet. You can assign tasks to them and credit them straight away, and invite them later. Their level takes effect when they join.",
     "badName": "Enter a name (up to 100 characters).",
     "nameTaken": "Someone with that name is already on the list. Add a surname or initial to tell them apart.",
     "nameTakenEnable": "Someone active already has this name. Rename one of them first.",
@@ -549,12 +553,14 @@
     "noAccount": "No account yet",
     "hasAccount": "That person already has an account.",
     "personDisabled": "Re-enable this person before inviting them.",
-    "noAccountRole": "People without an account get their role from their invite.",
     "inviteAction": "Invite",
     "inviteFor": "Invite {name} with their work email. When they accept, the tasks already assigned to them become theirs.",
     "renameAction": "Rename",
     "forPerson": "for {name}",
-    "confirmDisablePerson": "Disable {name}? They’ll leave the pickers but stay on their past tasks."
+    "confirmDisablePerson": "Disable {name}? They’ll leave the pickers but stay on their past tasks.",
+    "outranked": "You can only do that for people below your level.",
+    "levelNotAllowed": "You can only give levels below your own.",
+    "levelsHint": "From highest: Superadmin, Executive, Admin, Member, Trainee. You can manage people below your level and give them any level below yours. Trainees can’t assign other people or close tasks."
   },
   "labels": {
     "title": "Labels",
@@ -627,7 +633,8 @@
     "appDisconnected": "App disconnected.",
     "appsDisconnected": "All apps disconnected.",
     "skills": "Skills",
-    "skillsHint": "In your own words, separated by commas. Used to suggest tasks that fit you."
+    "skillsHint": "In your own words, separated by commas. Used to suggest tasks that fit you.",
+    "yourLevel": "Your level: {level}"
   },
   "twoFactor": {
     "title": "Set up two-step verification",
@@ -1026,5 +1033,10 @@
     "due": "Due date: {date}",
     "alsoOnIt": "Also on it: {names}",
     "unmerged": "Undid merging {n} into this task."
+  },
+  "trainee": {
+    "closeNote": "Trainees can’t close tasks. When it’s finished, move it to Review and the reviewer will close it.",
+    "assignNote": "As a trainee, you can only add or take off yourself. Other people stay as they are.",
+    "notAllowed": "Trainees can’t do that."
   }
 }

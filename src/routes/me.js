@@ -7,6 +7,7 @@ import { one, q } from '../db.js';
 import { listGrants, revokeAllGrants, revokeGrant } from '../oauth.js';
 import { hashPassword, passwordProblem, verifyPassword, MAX_LENGTH } from '../passwords.js';
 import { enforce } from '../ratelimit.js';
+import { isAdmin } from '../roles.js';
 import { newTotpSecret, totpQrDataUrl, verifyTotp } from '../totp.js';
 import { HttpError } from '../services/tasks.js';
 import { parse, profileSchema } from '../validation.js';
@@ -100,7 +101,7 @@ export default function meRoutes(config) {
     if (!req.session.pendingTotp) req.session.pendingTotp = encryptField(newTotpSecret());
     const secret = decryptField(req.session.pendingTotp);
     const qr = await totpQrDataUrl(secret, me.email, config.appName);
-    res.render('settings/two-factor.njk', { qr, secret: secret.replace(/(.{4})/g, '$1 ').trim(), required: req.user.role === 'admin' });
+    res.render('settings/two-factor.njk', { qr, secret: secret.replace(/(.{4})/g, '$1 ').trim(), required: isAdmin(req.user) });
   });
 
   r.post('/settings/two-factor', requireAuth, async (req, res) => {
@@ -112,7 +113,7 @@ export default function meRoutes(config) {
       const me = await one('SELECT email FROM users WHERE id = $1', [req.user.id]);
       const qr = await totpQrDataUrl(secret, me.email, config.appName);
       return res.status(400).render('settings/two-factor.njk', {
-        qr, secret: secret.replace(/(.{4})/g, '$1 ').trim(), required: req.user.role === 'admin', error: req.t('auth.badCode'),
+        qr, secret: secret.replace(/(.{4})/g, '$1 ').trim(), required: isAdmin(req.user), error: req.t('auth.badCode'),
       });
     }
     const codes = newRecoveryCodes();
@@ -127,7 +128,7 @@ export default function meRoutes(config) {
   });
 
   r.post('/settings/two-factor/disable', requireAuth, async (req, res) => {
-    if (req.user.role === 'admin') throw new HttpError(403, 'admins must keep two-step verification');
+    if (isAdmin(req.user)) throw new HttpError(403, 'admins must keep two-step verification');
     await enforce(`2fa-disable:${req.user.id}`, 6, 900);
     const user = await one('SELECT password_hash, totp_secret_enc, totp_last_step FROM users WHERE id = $1', [req.user.id]);
     const okPassword = await verifyPassword(user.password_hash, readPassword(req.body.password));

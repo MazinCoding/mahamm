@@ -7,10 +7,11 @@ import {
   captureTasks, matchPerson, normaliseName, resolveLabels, resolveNames, settleNoAssignee, teamPeople, undoCapture,
 } from './capture.js';
 import { alike, mergeIntoMatch, openCloseMatch } from './matches.js';
+import { TRAINEE_ASSIGN, isTrainee } from '../roles.js';
 import { createPreview } from './previews.js';
 import { getWipLimit, inProgressCount } from './settings.js';
 import {
-  CARD_COLUMNS, CARD_FROM, HttpError, UNDO_MINUTES, activeIds, addComment, applyEdit, canEdit, escapeLike, flagTask,
+  CARD_COLUMNS, CARD_FROM, HttpError, UNDO_MINUTES, activeIds, addComment, applyEdit, assertCanClose, canEdit, escapeLike, flagTask,
   joinTask, lockTask, myTasks, reopenInside, resolveFlag, reviewersOf, suggestedTasks, taskDetail, undoBatch,
 } from './tasks.js';
 
@@ -367,6 +368,7 @@ export async function updateTasks(input, actor, ip, opts) {
   const missing = [...adding.missing, ...removing.missing, ...labelsIn.missing, ...labelsOut.missing, ...reviewerMissing];
   // Nothing changes while a name or label is unclear: ask, then try again.
   if (missing.length) return { changed: false, missing };
+  if (isTrainee(actor) && [...adding.ids, ...removing.ids].some((u) => u !== actor.id)) throw new HttpError(403, TRAINEE_ASSIGN);
   const why = confirmationReasons({ count: input.task_ids.length, removesOthers: removing.ids.some((u) => u !== actor.id) });
   if (why.length && !opts.confirmed) {
     const names = await namesById();
@@ -453,6 +455,7 @@ export async function updateTasks(input, actor, ip, opts) {
 
 // input: { task_ids, reason, credit: [names], duplicate_of }
 export async function closeTasks(input, actor, ip, opts) {
+  assertCanClose(actor);
   const { origin } = opts;
   const reason = REASON_IN[input.reason];
   if (reason === 'duplicate' && input.task_ids.length > 1) throw new HttpError(400, 'one duplicate at a time');

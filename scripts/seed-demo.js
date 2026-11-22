@@ -32,15 +32,15 @@ if ((await one('SELECT count(*)::int AS n FROM users')).n > 0) {
 }
 
 const PEOPLE = {
-  ab: ['Ahmed Al-Balushi', 'admin'], mk: ['Maryam Al-Kindi', 'admin'], fh: ['Fatma Al-Harthi', 'member'],
+  ab: ['Ahmed Al-Balushi', 'superadmin'], mk: ['Maryam Al-Kindi', 'executive'], fh: ['Fatma Al-Harthi', 'admin'],
   sr: ['Said Al-Rawahi', 'member'], kh: ['Khalid Al-Hinai', 'member'], al: ['Aisha Al-Lawati', 'member'],
-  ym: ['Yousef Al-Maskari', 'member'], nz: ['Noor Al-Zadjali', 'member'], lb: ['Laila Al-Busaidi', 'member'],
+  ym: ['Yousef Al-Maskari', 'trainee'], nz: ['Noor Al-Zadjali', 'member'], lb: ['Laila Al-Busaidi', 'member'],
 };
 const hash = await hashPassword(password);
 const u = {};
 for (const [key, [name, role]] of Object.entries(PEOPLE)) {
   const email = `${name.split(' ')[0].toLowerCase()}@example.com`;
-  const totp = role === 'admin' ? encryptField(newTotpSecret()) : null;
+  const totp = ['admin', 'executive', 'superadmin'].includes(role) ? encryptField(newTotpSecret()) : null;
   const row = await one(
     `INSERT INTO users (email, name, password_hash, role, totp_enabled, totp_secret_enc, last_seen_at)
      VALUES ($1, $2, $3, $4, $5, $6, now() - make_interval(mins => $7)) RETURNING id, name, role`,

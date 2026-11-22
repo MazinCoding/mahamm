@@ -3,6 +3,7 @@ import { describe } from '../audit.js';
 import { requireAdmin, requireAuth } from '../auth.js';
 import { q } from '../db.js';
 import { limiter } from '../ratelimit.js';
+import { isTrainee, pickable } from '../roles.js';
 import { safeLocalPath } from '../security.js';
 import { MAX_ATTACHMENT_BYTES, checkAttachment, uploadThenCsrf } from '../uploads.js';
 import {
@@ -117,7 +118,7 @@ export default function taskRoutes(config) {
       page: Math.min(idParam(req.query.page) || 1, 10000),
     };
     const [{ rows, total }, labels, people, assignable, wipLimit, wipCount] = await Promise.all([
-      tableTasks({ ...filters, timezone: config.timezone }), allLabels(), allPeopleNames(), activePeople(),
+      tableTasks({ ...filters, timezone: config.timezone }), allLabels(), allPeopleNames(), activePeople().then((all) => pickable(req.user, all)),
       getWipLimit(config.wipLimit), inProgressCount(),
     ]);
     for (const row of rows) row.editable = !row.closed_at && canEdit(req.user, row);
@@ -207,6 +208,10 @@ export default function taskRoutes(config) {
 
   r.get('/table/close', requireAuth, async (req, res) => {
     const back = tableBack(req.query.back);
+    if (isTrainee(req.user)) {
+      flash(req, req.t('trainee.closeNote'), 'warn');
+      return res.redirect(back);
+    }
     const picked = parse(bulkIdsSchema, { ids: req.query.ids });
     if (picked.errors) {
       flash(req, req.t('table.selectFirst'), 'warn');
@@ -387,7 +392,7 @@ export default function taskRoutes(config) {
   r.get('/tasks/new', requireAuth, async (req, res) => {
     const [labels, people] = await Promise.all([allLabels(), activePeople()]);
     res.render('tasks/form.njk', {
-      mode: 'new', labels, people, errors: {},
+      mode: 'new', labels, people: pickable(req.user, people), errors: {},
       values: { title: '', description: '', status: req.query.status === 'backlog' ? 'backlog' : 'todo', priority: 'med', due_date: '', labels: [], assignees: [] },
     });
   });
@@ -405,7 +410,7 @@ export default function taskRoutes(config) {
       const [labels, people] = await Promise.all([allLabels(), activePeople()]);
       const errors = { ...(result.errors || {}) };
       if (fileError) errors.file = fileError;
-      return res.status(400).render('tasks/form.njk', { mode: 'new', labels, people, errors, values: formValues(req.body) });
+      return res.status(400).render('tasks/form.njk', { mode: 'new', labels, people: pickable(req.user, people), errors, values: formValues(req.body) });
     }
     const task = await createTask(result.data, req.user, req.ip, file);
     flash(req, req.t('task.created', { n: `#${task.id}` }));
@@ -449,7 +454,7 @@ export default function taskRoutes(config) {
     // Keep currently assigned people visible even if their account was disabled.
     for (const a of task.assignees) if (!people.some((p) => p.id === a.id)) people.push({ id: a.id, name: a.name });
     res.render('tasks/form.njk', {
-      mode: 'edit', task, labels, people, reviewers: people.filter((p) => p.email), errors: {},
+      mode: 'edit', task, labels, people: pickable(req.user, people), reviewers: people.filter((p) => p.email), errors: {},
       values: {
         title: task.title, description: task.description, priority: task.priority, due_date: task.due_date || '',
         labels: task.labels.map((l) => String(l.id)), assignees: task.assignees.map((a) => a.id), team_task: task.team_task,
@@ -465,7 +470,7 @@ export default function taskRoutes(config) {
     if (result.errors) {
       const [labels, people] = await Promise.all([allLabels(), activePeople()]);
       return res.status(400).render('tasks/form.njk', {
-        mode: 'edit', task, labels, people, reviewers: people.filter((p) => p.email), errors: result.errors, values: formValues(req.body),
+        mode: 'edit', task, labels, people: pickable(req.user, people), reviewers: people.filter((p) => p.email), errors: result.errors, values: formValues(req.body),
       });
     }
     const { changed } = await updateTask(task.id, result.data, req.user, req.ip);
@@ -477,6 +482,13 @@ export default function taskRoutes(config) {
   r.post('/tasks/:id/move', requireAuth, writeLimit, async (req, res) => {
     const id = taskId(req);
     const json = req.is('application/json');
+    if (req.body.status === 'done' && isTrainee(req.user)) {
+      // A trainee's finished work goes to Review; the reviewer closes it.
+      await moveTask(id, 'review', req.user, req.ip);
+      flash(req, req.t('trainee.closeNote'), 'warn');
+      if (json) return res.json({ ok: true });
+      return res.redirect(`/tasks/${id}`);
+    }
     if (req.body.status === 'done') {
       if (json) return res.json({ ok: true, redirect: `/tasks/${id}/close` });
       return res.redirect(`/tasks/${id}/close`);
@@ -492,6 +504,10 @@ export default function taskRoutes(config) {
   r.get('/tasks/:id/close', requireAuth, async (req, res) => {
     const task = await loadTask(req);
     if (task.closed_at) return res.redirect(`/tasks/${task.id}`);
+    if (isTrainee(req.user)) {
+      flash(req, req.t('trainee.closeNote'), 'warn');
+      return res.redirect(`/tasks/${task.id}`);
+    }
     const people = await activePeople();
     const defaults = task.assignees.filter((a) => people.some((p) => p.id === a.id)).map((a) => a.id);
     res.render('tasks/close.njk', { task, people, values: { reason: 'completed', credited: defaults.length ? defaults : [req.user.id], duplicate_of: '' }, errors: {} });

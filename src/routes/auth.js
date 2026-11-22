@@ -8,6 +8,7 @@ import { LANGS, translator } from '../i18n.js';
 import { composeEmail, mailEnabled, sendNow } from '../mail.js';
 import { equaliseTiming, hashPassword, needsRehash, passwordProblem, verifyPassword, MAX_LENGTH } from '../passwords.js';
 import { clear, enforce, hit, peek, RateLimited } from '../ratelimit.js';
+import { isAdmin } from '../roles.js';
 import { safeLocalPath } from '../security.js';
 import { verifyTotp } from '../totp.js';
 import { acceptInvite, completeReset, createReset, findInvite, findReset, userCount } from '../services/users.js';
@@ -230,10 +231,11 @@ export default function authRoutes(config) {
     }
     await startSession(req, user);
     await audit({ query: q }, { actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, ip: req.ip });
-    res.redirect(user.role === 'admin' ? '/settings/two-factor' : '/home');
+    res.redirect(isAdmin(user) ? '/settings/two-factor' : '/home');
   });
 
   // First-run setup: only works while there are no users, and only with SETUP_TOKEN.
+  // The account made here is the superadmin.
   r.get('/setup', async (req, res) => {
     if ((await userCount()) > 0) throw new HttpError(404);
     res.render('auth/setup.njk', { enabled: !!config.setupToken, name: '', email: '' });
@@ -259,7 +261,7 @@ export default function authRoutes(config) {
       const count = await db.query('SELECT count(*)::int AS n FROM users');
       if (count.rows[0].n > 0) throw new HttpError(404);
       const created = (await db.query(
-        `INSERT INTO users (email, name, password_hash, role, lang) VALUES ($1, $2, $3, 'admin', $4)
+        `INSERT INTO users (email, name, password_hash, role, lang) VALUES ($1, $2, $3, 'superadmin', $4)
          RETURNING id, email, name, role, password_changed_at`,
         [e.data, n.data, hash, req.lang],
       )).rows[0];

@@ -3,7 +3,7 @@ import { audit } from '../audit.js';
 import { q, tx } from '../db.js';
 import { translator } from '../i18n.js';
 import { notifyBatch } from '../notify.js';
-import { HttpError, applyEdit, canEdit, getTask, lockTask, reviewersOf } from './tasks.js';
+import { HttpError, applyEdit, assertTraineeAssigns, canEdit, getTask, lockTask, reviewersOf } from './tasks.js';
 import { flagCloseMatch } from './matches.js';
 
 // Tasks captured through the connector: created straight away from what a
@@ -134,6 +134,7 @@ export async function captureTasks(items, actor, ip, { source = 'text', origin, 
       const tags = resolveLabels(item.labels || [], labels);
       missing.push(...tags.missing);
       if (item.assign_to_me && !ids.includes(actor.id)) ids.unshift(actor.id);
+      assertTraineeAssigns(actor, [], ids);
       const status = item.started ? 'progress' : 'todo';
       const { rows } = await db.query(
         `INSERT INTO tasks (title, description, status, priority, due_date, creator_id, team_task)

@@ -2,7 +2,9 @@
 {% import "macros.njk" as m with context %}
 {% block title %}{{ t('people.title') }}{% endblock %}
 {% block content %}
-<div class="page-head"><div><h1>{{ t('people.title') }}</h1><p class="sub">{{ t('people.sub') }}</p></div></div>
+{% macro levelOptions(selected) %}{% for l in levels %}<option value="{{ l }}" {% if l == selected %}selected{% endif %}>{{ t('role.' + l) }}</option>{% endfor %}{% endmacro %}
+{% macro levelChip(role) %}<span class="chip {{ 'c-teal' if role in ['admin', 'executive', 'superadmin'] else ('c-amber' if role == 'trainee' else 'c-gray') }}">{{ t('role.' + role) }}</span>{% endmacro %}
+<div class="page-head"><div><h1>{{ t('people.title') }}</h1><p class="sub">{{ t('people.sub') }}</p><p class="hint">{{ t('people.levelsHint') }}</p></div></div>
 
 <form class="form card-form inline-form" method="post" action="/people/invite">
   <input type="hidden" name="_csrf" value="{{ csrfToken }}">
@@ -13,10 +15,7 @@
   </div>
   <div class="field">
     <label for="inv-role">{{ t('people.role') }}</label>
-    <select id="inv-role" class="input" name="role">
-      <option value="member" {% if values.role == 'member' %}selected{% endif %}>{{ t('role.member') }}</option>
-      <option value="admin" {% if values.role == 'admin' %}selected{% endif %}>{{ t('role.admin') }}</option>
-    </select>
+    <select id="inv-role" class="input" name="role">{{ levelOptions(values.role) }}</select>
   </div>
   <div class="field"><button class="btn btn-primary" type="submit">{{ t('people.invite') }}</button></div>
   <p class="hint full">{{ t('people.inviteHint') }}{% if not mail %} {{ t('people.noMail') }}{% endif %}</p>
@@ -29,6 +28,10 @@
     <label for="add-name">{{ t('people.name') }}</label>
     <input id="add-name" class="input" type="text" name="name" value="{{ values.name }}" maxlength="100" required dir="auto" autocomplete="off" {% if errors.name %}aria-invalid="true" aria-describedby="err-name"{% endif %}>
     {% if errors.name %}<p class="error" id="err-name">{{ errors.name }}</p>{% endif %}
+  </div>
+  <div class="field">
+    <label for="add-role">{{ t('people.role') }}</label>
+    <select id="add-role" class="input" name="role">{{ levelOptions(values.level) }}</select>
   </div>
   <div class="field"><button class="btn btn-secondary" type="submit">{{ t('people.add') }}</button></div>
   <p class="hint full">{{ t('people.addHint') }}</p>
@@ -47,10 +50,12 @@
         <td>{{ i.invited_by_name }}</td>
         <td>{{ fmt.dateTime(i.expires_at) }}</td>
         <td class="actions">
+          {% if i.manageable %}
           <form method="post" action="/people/invites/{{ i.id }}/revoke" class="inline" data-confirm="{{ t('people.confirmRevoke') }}">
             <input type="hidden" name="_csrf" value="{{ csrfToken }}">
             <button class="btn btn-link btn-sm" type="submit">{{ t('people.revoke') }}</button>
           </form>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -77,7 +82,7 @@
             <span class="strong block"><bdi>{{ u.name }}</bdi>{% if u.id == user.id %} ({{ t('common.you') }}){% endif %}</span>
             {% if u.no_account %}<span class="chip c-amber">{{ t('people.noAccount') }}</span>{% else %}<span class="small muted block" dir="ltr">{{ u.email }}</span>{% endif %}
           </span></span>
-          {% if u.no_account and u.status == 'active' %}
+          {% if u.no_account and u.status == 'active' and u.manageable %}
           <div class="person-tools">
             <details>
               <summary class="btn btn-link btn-sm">{{ t('people.inviteAction') }}</summary>
@@ -87,10 +92,7 @@
                 <label class="sr-only" for="pi-email-{{ u.id }}">{{ t('people.email') }}</label>
                 <input id="pi-email-{{ u.id }}" class="input input-sm" type="email" name="email" maxlength="254" required dir="ltr" placeholder="name@company.om">
                 <label class="sr-only" for="pi-role-{{ u.id }}">{{ t('people.role') }}</label>
-                <select id="pi-role-{{ u.id }}" class="input input-sm" name="role">
-                  <option value="member" selected>{{ t('role.member') }}</option>
-                  <option value="admin">{{ t('role.admin') }}</option>
-                </select>
+                <select id="pi-role-{{ u.id }}" class="input input-sm" name="role">{{ levelOptions(u.role) }}</select>
                 <button class="btn btn-primary btn-sm" type="submit">{{ t('people.invite') }}</button>
               </form>
             </details>
@@ -107,14 +109,11 @@
           {% endif %}
         </td>
         <td>
-          {% if u.id == user.id or u.no_account %}<span class="chip {{ 'c-teal' if u.role == 'admin' else 'c-gray' }}">{{ t('role.' + u.role) }}</span>{% else %}
+          {% if not u.manageable %}{{ levelChip(u.role) }}{% else %}
           <form method="post" action="/people/{{ u.id }}/role" class="inline role-form">
             <input type="hidden" name="_csrf" value="{{ csrfToken }}">
             <label class="sr-only" for="role-{{ u.id }}">{{ t('people.role') }}</label>
-            <select id="role-{{ u.id }}" class="input input-sm" name="role" data-autosubmit data-confirm="{{ t('people.confirmRole') }}">
-              <option value="member" {% if u.role == 'member' %}selected{% endif %}>{{ t('role.member') }}</option>
-              <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>{{ t('role.admin') }}</option>
-            </select>
+            <select id="role-{{ u.id }}" class="input input-sm" name="role" data-autosubmit data-confirm="{{ t('people.confirmRole') }}">{{ levelOptions(u.role) }}</select>
             <noscript><button class="btn btn-link btn-sm" type="submit">{{ t('common.save') }}</button></noscript>
           </form>
           {% endif %}
@@ -124,7 +123,7 @@
         <td>{% if u.last_seen_at %}{{ fmt.ago(u.last_seen_at) }}{% else %}<em class="muted">{{ t('people.never') }}</em>{% endif %}</td>
         <td>{{ u.completed }}</td>
         <td class="actions">
-          {% if u.id != user.id %}
+          {% if u.manageable %}
             {% if u.status == 'active' %}
             {% if not u.no_account %}
             <form method="post" action="/people/{{ u.id }}/reset-link" class="inline">

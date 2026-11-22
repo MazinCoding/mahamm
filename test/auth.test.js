@@ -28,7 +28,7 @@ describe('first-run setup', () => {
     assert.equal(good.status, 302);
     assert.equal(good.headers.location, '/settings/two-factor');
     const row = (await q(`SELECT role, email FROM users`)).rows;
-    assert.deepEqual(row, [{ role: 'admin', email: 'first@example.com' }]);
+    assert.deepEqual(row, [{ role: 'superadmin', email: 'first@example.com' }]);
     // Admin without two-step is held on the setup page.
     const board = await agent.get('/board');
     assert.equal(board.headers.location, '/settings/two-factor');

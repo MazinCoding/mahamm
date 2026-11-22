@@ -5,6 +5,7 @@ An invite-only task board with a complete audit trail, built to replace a shared
 - **Board and list views** of the same tasks: Backlog → To do → In progress → Review → Done, with a work-in-progress limit.
 - **Close and credit**: whoever closes a task picks who actually did the work. Both are recorded.
 - **Flags**: anyone can flag a task that was created by mistake or has wrong details; the creator or an admin resolves it.
+- **Access levels**: Superadmin, Executive, Admin, Member and Trainee. People manage only those below them; trainees can't assign other people or close tasks, so their finished work goes to Review.
 - **Nothing is deleted.** Tasks are closed, files are hidden, and the audit log is append-only at the database level.
 - **English and Arabic**, with a right-to-left layout.
 - **Attachments**, comments with @mentions, in-app notifications and optional email.
@@ -19,7 +20,7 @@ Stack: Node.js 22, Express 5, server-rendered Nunjucks templates, PostgreSQL. No
 2. In Render: **New → Blueprint**, connect GitHub, pick the repository, and click **Apply**. Render reads `render.yaml` and creates the web service and a private database in Frankfurt.
 3. When it asks for the `SMTP_*` values, leave them empty for now (see Email below).
 4. When the deploy is live, open **Environment** on the `mahamm` service and copy the value of `SETUP_TOKEN`.
-5. Visit `https://<your-service>.onrender.com/setup`, paste the token, and create the first admin account. Set up two-step verification when asked and save the recovery codes.
+5. Visit `https://<your-service>.onrender.com/setup`, paste the token, and create the first account (the superadmin). Set up two-step verification when asked and save the recovery codes.
 6. Back in **Environment**, delete `SETUP_TOKEN` (the setup page is already switched off once an account exists).
 7. Invite your coworkers from **People**. Without email set up, each invite link is shown once for you to send yourself (WhatsApp works fine).
 8. Optional: **Import** your current Excel sheet. The preview shows exactly what will happen to each row before anything is saved.

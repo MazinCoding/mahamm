@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../auth.js';
 import { q } from '../db.js';
+import { pickable } from '../roles.js';
 import { SUGGESTED_PAGE, canEdit, getTask, myTasks, suggestedTasks } from '../services/tasks.js';
 import { activePeople } from '../services/users.js';
 import { idParam } from '../validation.js';
@@ -37,7 +38,7 @@ export default function homeRoutes(config) {
       added,
       labels: added ? await labelsFor(added) : [],
       // People who could be added: active, and not on the task already.
-      others: added ? (await activePeople()).filter((p) => !added.assignees.some((a) => a.id === p.id)) : [],
+      others: added ? pickable(req.user, await activePeople()).filter((p) => !added.assignees.some((a) => a.id === p.id)) : [],
       today,
       overdue: mine.filter((t) => t.due_date && t.due_date < today).length,
       firstName: String(req.user.name || '').trim().split(/\s+/)[0],

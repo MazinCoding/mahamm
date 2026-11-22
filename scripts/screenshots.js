@@ -295,6 +295,30 @@ await step('people-without-accounts', async () => {
   await shot(page, '14e-people-after-join');
 });
 
+// Access levels: the People page as the superadmin, then the board as a trainee.
+await step('access-levels', async () => {
+  await page.goto(`${base}/people`);
+  const levels = await page.locator('#add-role option').allInnerTexts();
+  note(`check: levels the superadmin can give = ${levels.join(', ')}`);
+  const maryam = page.locator('tbody tr', { has: page.locator('.person', { hasText: 'Maryam Al-Kindi' }) });
+  note(`check: Maryam's level = ${await maryam.locator('select[name=role] option:checked').innerText()}`);
+  await shot(page, '14f-people-levels');
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const trainee = await ctx.newPage();
+  watch(trainee, 'trainee');
+  await trainee.goto(`${base}/login`);
+  await trainee.fill('#email', 'yousef@example.com');
+  await trainee.fill('#password', process.env.DEMO_PASSWORD);
+  await Promise.all([trainee.waitForEvent('load'), trainee.click('form[action="/login"] button[type=submit]')]);
+  await trainee.goto(`${base}/tasks/new`);
+  note(`check: trainee's assignee picker = ${(await trainee.locator('label.check span').allInnerTexts()).join(', ')}`);
+  await shot(trainee, '14g-trainee-new-task');
+  await trainee.goto(`${base}/tasks/${ids.pdf}`);
+  note(`check: trainee sees a Close button = ${await trainee.locator('a[href$="/close"]').count() > 0 ? 'YES (wrong)' : 'no'}; status options = ${(await trainee.locator('#status option').allInnerTexts()).join(', ')}`);
+  await shot(trainee, '14h-trainee-task');
+  await ctx.close();
+});
+
 // Close a task through the form, crediting someone else.
 await step('close-flow', async () => {
   await page.goto(`${base}/tasks/${ids.safari}/close`);
