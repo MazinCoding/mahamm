@@ -31,9 +31,9 @@ after(teardown);
 beforeEach(resetLimits);
 
 describe('the database itself', () => {
-  test('every company table has org_id and row-level security with a policy', async () => {
+  test('every company table has org_id and forced row-level security with a policy', async () => {
     const { rows } = await q(`
-      SELECT c.relname AS name, c.relrowsecurity AS rls,
+      SELECT c.relname AS name, c.relrowsecurity AND c.relforcerowsecurity AS rls,
         EXISTS (SELECT 1 FROM information_schema.columns k WHERE k.table_schema = 'public' AND k.table_name = c.relname AND k.column_name = 'org_id') AS has_org,
         EXISTS (SELECT 1 FROM pg_policies p WHERE p.schemaname = 'public' AND p.tablename = c.relname) AS has_policy
       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
