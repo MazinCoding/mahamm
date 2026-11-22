@@ -53,7 +53,7 @@ export async function setup(envOverrides = {}) {
   END $$`);
   await admin.query(`ALTER ROLE ${APP_ROLE} PASSWORD '${appDb.password}'`);
   await admin.query(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
-  await admin.query(`GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`);
+  await admin.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`);
   await admin.query(`GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE}`);
   await admin.end();
   const config = loadConfig({ ...testEnv, DATABASE_URL: appDb.url, ...envOverrides });
