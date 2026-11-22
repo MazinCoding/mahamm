@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { q, tx } from '../db.js';
 import { closeTasks, createFromPreview, updateTasks } from './connector.js';
+import { isAdmin } from '../roles.js';
 import { getWipLimit, setWipLimit } from './settings.js';
 import { HttpError } from './tasks.js';
 import { addPerson } from './users.js';
@@ -70,7 +71,7 @@ export async function confirmPreview(id, actor, ip, opts, { secret = null, websi
   else if (kind === 'close') result = await closeTasks(payload, actor, ip, run);
   else if (kind === 'create') result = await createFromPreview(payload, actor, ip, run);
   else {
-    if (actor.role !== 'admin') throw new HttpError(403, 'admins only');
+    if (!isAdmin(actor)) throw new HttpError(403, 'admins only');
     if (payload.action === 'add_person') {
       const person = await addPerson(payload.name, actor, ip);
       result = { changed: true, added_person: person.name };
@@ -88,7 +89,7 @@ export async function cancelPreview(id, actor) {
 }
 
 export async function adminPreview(input, actor, opts) {
-  if (actor.role !== 'admin') throw new HttpError(403, 'admins only');
+  if (!isAdmin(actor)) throw new HttpError(403, 'admins only');
   if (input.action === 'add_person') {
     const taken = await q(`SELECT 1 FROM users WHERE status = 'active' AND lower(name) = lower($1)`, [input.name]);
     if (taken.rows[0]) throw new HttpError(409, 'name taken');

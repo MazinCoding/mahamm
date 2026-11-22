@@ -1,11 +1,12 @@
 import { hashToken, newToken } from './crypto.js';
 import { one, q } from './db.js';
+import { isAdminRole } from './roles.js';
 
 // How long a remembered device (and a "keep me signed in" session) lasts.
 // Admins get a shorter period because their accounts can do more.
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const REMEMBER_DAYS = { admin: 30, member: 90 };
-export const rememberDays = (role) => (role === 'admin' ? REMEMBER_DAYS.admin : REMEMBER_DAYS.member);
+export const rememberDays = (role) => (isAdminRole(role) ? REMEMBER_DAYS.admin : REMEMBER_DAYS.member);
 export const rememberMs = (role) => rememberDays(role) * DAY_MS;
 
 export const deviceCookieName = (config) => (config.isProd ? '__Host-mahamm.device' : 'mahamm.device');

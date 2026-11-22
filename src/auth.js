@@ -4,11 +4,12 @@ import { csrfSync } from 'csrf-sync';
 import { getPool, q } from './db.js';
 import { forgetAllDevices, rememberMs } from './devices.js';
 import { revokeAllGrants } from './oauth.js';
+import { isAdmin } from './roles.js';
 
 const ABSOLUTE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000; // sign in again at least weekly
 const IDLE_TIMEOUT_MS = 12 * 60 * 60 * 1000; // or after 12 hours without activity
 // "Keep me signed in" sessions last up to the remembered-device period for the
-// person's current role (30 days for admins, 90 for members), renewed on use.
+// person's current role (30 days for admins and above, 90 for members and trainees), renewed on use.
 const lifetimeMs = (session, role) => (session.keep ? rememberMs(role) : ABSOLUTE_LIFETIME_MS);
 
 export function sessionMiddleware(config) {
@@ -137,16 +138,16 @@ export function requireAuth(req, res, next) {
 
 // Admin-only routes deny by default; the check runs on the server.
 export function requireAdmin(req, res, next) {
-  if (req.user?.role === 'admin') return next();
+  if (isAdmin(req.user)) return next();
   const err = new Error('admins only');
   err.status = 403;
   return next(err);
 }
 
-// Admins must turn on two-step verification before they can do anything else.
+// Admins (and executives and the superadmin) must turn on two-step verification before they can do anything else.
 const ADMIN_2FA_ALLOWED = [/^\/settings\/two-factor/, /^\/logout$/, /^\/lang$/];
 export function enforceAdminTwoFactor(req, res, next) {
-  if (!req.user || req.user.role !== 'admin' || req.user.totp_enabled) return next();
+  if (!isAdmin(req.user) || req.user.totp_enabled) return next();
   if (ADMIN_2FA_ALLOWED.some((re) => re.test(req.path))) return next();
   if (req.method === 'GET') return res.redirect('/settings/two-factor');
   const err = new Error('two-step verification required');

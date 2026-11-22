@@ -47,6 +47,7 @@
       <label class="check"><input type="checkbox" name="assignees" value="{{ p.id }}" {% if p.id in values.assignees %}checked{% endif %}>{{ m.avatar(p) }}<span>{{ p.name }}</span></label>
       {% endfor %}
     </div>
+    {% if user.isTrainee %}<p class="hint">{{ t('trainee.assignNote') }}</p>{% endif %}
   </fieldset>
   <fieldset class="field">
     <legend>{{ t('field.labels') }} <span class="muted">({{ t('common.optional') }})</span></legend>

@@ -5,6 +5,7 @@ import { one, q } from '../db.js';
 import { translator } from '../i18n.js';
 import { composeEmail, mailEnabled, sendNow } from '../mail.js';
 import { enforce } from '../ratelimit.js';
+import { canGrant, canManage, grantable, isAdmin } from '../roles.js';
 import { MAX_IMPORT_BYTES, uploadThenCsrf } from '../uploads.js';
 import {
   FIELDS, MAX_NEW_PEOPLE, buildPreview, getJob, guessMapping, parseSheet, readMapping, runImport, saveJob,
@@ -13,7 +14,7 @@ import { HttpError } from '../services/tasks.js';
 import {
   activePeople, addPerson, changeRole, createInvite, createReset, peopleOverview, renamePerson, revokeInvite, setStatus,
 } from '../services/users.js';
-import { cleanLine, idParam, inviteSchema, labelSchema, nameField, parse, personSchema, uuidParam } from '../validation.js';
+import { cleanLine, idParam, inviteSchema, labelSchema, nameField, parse, personSchema, roleSchema, uuidParam } from '../validation.js';
 
 const AUDIT_PAGE = 100;
 
@@ -38,12 +39,12 @@ export default function adminRoutes(config) {
       return `$${params.length}`;
     };
     // Members see task history; admins also see accounts and security.
-    if (req.user.role !== 'admin') where.push(`e.action = ANY(${add(TASK_ACTIONS)})`);
+    if (!isAdmin(req.user)) where.push(`e.action = ANY(${add(TASK_ACTIONS)})`);
     const who = req.query.who === 'system' ? 'system' : uuidParam(req.query.who);
     if (who === 'system') where.push('e.actor_id IS NULL');
     else if (who) where.push(`e.actor_id = ${add(who)}`);
     const group = Object.keys(GROUPS).includes(req.query.group) ? req.query.group : null;
-    if (group && (group !== 'account' || req.user.role === 'admin')) where.push(`e.action = ANY(${add(GROUPS[group])})`);
+    if (group && (group !== 'account' || isAdmin(req.user))) where.push(`e.action = ANY(${add(GROUPS[group])})`);
     const task = idParam(req.query.task);
     if (task) where.push(`e.task_id = ${add(task)}`);
     const sql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -88,7 +89,7 @@ export default function adminRoutes(config) {
     };
     res.render('audit.njk', {
       events, people, total, who, group, task,
-      groups: Object.keys(GROUPS).filter((g) => g !== 'account' || req.user.role === 'admin'),
+      groups: Object.keys(GROUPS).filter((g) => g !== 'account' || isAdmin(req.user)),
       prevUrl: page > 1 ? qs(page - 1) : null,
       nextUrl: page * AUDIT_PAGE < total ? qs(page + 1) : null,
       exportUrl: `/audit.csv${qs(1).replace('/audit', '')}`,
@@ -116,8 +117,12 @@ export default function adminRoutes(config) {
 
   const peoplePage = async (req, res, status = 200, extra = {}) => {
     const { users, invites } = await peopleOverview();
+    // Which rows this admin can act on, and which levels they can give.
+    for (const u of users) u.manageable = u.id !== req.user.id && canManage(req.user, u.role);
+    for (const i of invites) i.manageable = canManage(req.user, i.role);
     res.status(status).render('people.njk', {
-      users, invites, mail: mailEnabled(), values: { email: '', role: 'member', name: '' }, errors: {}, ...extra,
+      users, invites, mail: mailEnabled(), levels: grantable(req.user).slice().reverse(),
+      values: { email: '', role: 'member', name: '', level: 'member' }, errors: {}, ...extra,
     });
   };
 
@@ -129,7 +134,7 @@ export default function adminRoutes(config) {
     try {
       created = await createInvite(email, role, req.user, req.ip, userId);
     } catch (err) {
-      if (err instanceof HttpError && err.status === 409) return onConflict(err.message);
+      if (err instanceof HttpError && (err.status === 409 || err.status === 403)) return onConflict(err.message);
       throw err;
     }
     const link = `${config.origin}/invite/${created.token}`;
@@ -156,7 +161,10 @@ export default function adminRoutes(config) {
   }
 
   const inviteConflict = (req, res) => (reason) => {
-    const map = { 'already a member': 'people.alreadyMember', 'has account': 'people.hasAccount', 'person disabled': 'people.personDisabled' };
+    const map = {
+      'already a member': 'people.alreadyMember', 'has account': 'people.hasAccount', 'person disabled': 'people.personDisabled',
+      outranked: 'people.outranked', 'level not allowed': 'people.levelNotAllowed',
+    };
     flash(req, req.t(map[reason] || 'errors.conflict'), 'warn');
     return res.redirect('/people');
   };
@@ -166,7 +174,7 @@ export default function adminRoutes(config) {
     const result = parse(inviteSchema, req.body);
     if (result.errors) {
       return peoplePage(req, res, 400, {
-        values: { email: String(req.body.email || '').slice(0, 254), role: req.body.role === 'admin' ? 'admin' : 'member', name: '' },
+        values: { email: String(req.body.email || '').slice(0, 254), role: canGrant(req.user, req.body.role) ? req.body.role : 'member', name: '', level: 'member' },
         errors: { email: req.t('people.badEmail') },
       });
     }
@@ -177,15 +185,17 @@ export default function adminRoutes(config) {
   r.post('/people/add', requireAuth, requireAdmin, async (req, res) => {
     await enforce(`person-add:${req.user.id}`, 200, 3600);
     const result = parse(personSchema, req.body);
+    const level = canGrant(req.user, req.body.role) ? req.body.role : 'member';
     if (result.errors) {
-      return peoplePage(req, res, 400, { values: { email: '', role: 'member', name: cleanLine(req.body.name).slice(0, 100) }, errors: { name: req.t('people.badName') } });
+      return peoplePage(req, res, 400, { values: { email: '', role: 'member', name: cleanLine(req.body.name).slice(0, 100), level }, errors: { name: req.t('people.badName') } });
     }
+    if (result.data.role && !canGrant(req.user, result.data.role)) throw new HttpError(403, 'level not allowed');
     try {
-      const person = await addPerson(result.data.name, req.user, req.ip);
+      const person = await addPerson(result.data.name, req.user, req.ip, result.data.role || 'member');
       flash(req, req.t('people.added', { name: person.name }));
     } catch (err) {
       if (!(err instanceof HttpError && err.status === 409)) throw err;
-      return peoplePage(req, res, 409, { values: { email: '', role: 'member', name: result.data.name }, errors: { name: req.t('people.nameTaken') } });
+      return peoplePage(req, res, 409, { values: { email: '', role: 'member', name: result.data.name, level }, errors: { name: req.t('people.nameTaken') } });
     }
     res.redirect('/people');
   });
@@ -203,8 +213,9 @@ export default function adminRoutes(config) {
       await renamePerson(id, result.data.name, req.user, req.ip);
       flash(req, req.t('people.renamed'));
     } catch (err) {
-      if (!(err instanceof HttpError && err.status === 409)) throw err;
-      flash(req, req.t(err.message === 'name taken' ? 'people.nameTaken' : 'people.hasAccount'), 'warn');
+      if (!(err instanceof HttpError && (err.status === 409 || err.status === 403))) throw err;
+      const map = { 'name taken': 'people.nameTaken', outranked: 'people.outranked' };
+      flash(req, req.t(map[err.message] || 'people.hasAccount'), 'warn');
     }
     res.redirect('/people');
   });
@@ -224,8 +235,13 @@ export default function adminRoutes(config) {
   r.post('/people/invites/:id/revoke', requireAuth, requireAdmin, async (req, res) => {
     const id = uuidParam(req.params.id);
     if (!id) throw new HttpError(404, 'not found');
-    await revokeInvite(id, req.user, req.ip);
-    flash(req, req.t('people.inviteRevoked'));
+    try {
+      await revokeInvite(id, req.user, req.ip);
+      flash(req, req.t('people.inviteRevoked'));
+    } catch (err) {
+      if (!(err instanceof HttpError && err.status === 403)) throw err;
+      flash(req, req.t('people.outranked'), 'warn');
+    }
     res.redirect('/people');
   });
 
@@ -234,10 +250,11 @@ export default function adminRoutes(config) {
       await fn();
       return null;
     } catch (err) {
-      if (err instanceof HttpError && err.status === 409) {
+      if (err instanceof HttpError && (err.status === 409 || err.status === 403)) {
         const map = {
           'last admin': 'people.lastAdmin', 'cannot change own role': 'people.notYourself',
-          'cannot disable yourself': 'people.notYourself', 'has no account': 'people.noAccountRole', 'name taken': 'people.nameTakenEnable',
+          'cannot disable yourself': 'people.notYourself', 'name taken': 'people.nameTakenEnable',
+          outranked: 'people.outranked', 'level not allowed': 'people.levelNotAllowed',
         };
         return req.t(map[err.message] || 'errors.conflict');
       }
@@ -248,7 +265,9 @@ export default function adminRoutes(config) {
   r.post('/people/:id/role', requireAuth, requireAdmin, async (req, res) => {
     const id = uuidParam(req.params.id);
     if (!id) throw new HttpError(404, 'not found');
-    const role = req.body.role === 'admin' ? 'admin' : 'member';
+    const result = parse(roleSchema, req.body);
+    if (result.errors) throw new HttpError(400, 'bad level');
+    const { role } = result.data;
     const problem = await guarded(req, () => changeRole(id, role, req.user, req.ip));
     flash(req, problem || req.t('people.roleChanged'), problem ? 'warn' : 'ok');
     res.redirect('/people');
@@ -265,8 +284,13 @@ export default function adminRoutes(config) {
 
   r.post('/people/:id/reset-link', requireAuth, requireAdmin, async (req, res) => {
     const id = uuidParam(req.params.id);
-    const target = id ? await one(`SELECT id, name FROM users WHERE id = $1 AND status = 'active' AND email IS NOT NULL`, [id]) : null;
+    const target = id ? await one(`SELECT id, name, role FROM users WHERE id = $1 AND status = 'active' AND email IS NOT NULL`, [id]) : null;
     if (!target) throw new HttpError(404, 'not found');
+    // A reset link is a way into the account, so only for people below you.
+    if (target.id === req.user.id || !canManage(req.user, target.role)) {
+      flash(req, req.t('people.outranked'), 'warn');
+      return res.redirect('/people');
+    }
     await enforce(`reset-link:${req.user.id}`, 20, 3600);
     const token = await createReset(target.id, req.user.id, 24, req.ip);
     res.render('link-once.njk', {

@@ -33,10 +33,12 @@
   </div>
   {% if canResolve %}
   <div class="match-actions">
+    {% if not user.isTrainee %}
     <form method="post" action="/tasks/{{ task.id }}/merge" class="inline">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}">
       <button class="btn btn-primary btn-sm" type="submit">{{ t('match.merge', { n: '#' + older.id }) }}</button>
     </form>
+    {% endif %}
     <form method="post" action="/tasks/{{ task.id }}/flags/{{ closeMatch.flagId }}/resolve" class="inline">
       <input type="hidden" name="_csrf" value="{{ csrfToken }}"><input type="hidden" name="resolution" value="dismissed">
       <button class="btn btn-secondary btn-sm" type="submit">{{ t('match.notSame') }}</button>
@@ -111,7 +113,7 @@
         <div class="composer-actions">
           {% if task.closed_at %}
           <button class="btn btn-secondary" type="submit" form="reopen-form">{{ t('task.reopen') }}</button>
-          {% else %}
+          {% elif not user.isTrainee %}
           <a class="btn btn-secondary" href="/tasks/{{ task.id }}/close"><svg class="ic-done" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9.5"/></svg>{{ t('task.close') }}</a>
           {% endif %}
           <button class="btn btn-primary" type="submit">{{ t('comment.submit') }}</button>
@@ -134,12 +136,13 @@
         <input type="hidden" name="_csrf" value="{{ csrfToken }}">
         <label class="sr-only" for="status">{{ t('field.status') }}</label>
         <select id="status" name="status" class="input">
-          {% for s in ['backlog', 'todo', 'progress', 'review', 'done'] %}
+          {% for s in (['backlog', 'todo', 'progress', 'review'] if user.isTrainee else ['backlog', 'todo', 'progress', 'review', 'done']) %}
           <option value="{{ s }}" {% if s == task.status %}selected{% endif %}>{{ t('status.' + s) }}</option>
           {% endfor %}
         </select>
         <button class="btn btn-secondary btn-sm" type="submit">{{ t('task.move') }}</button>
       </form>
+      {% if user.isTrainee %}<p class="hint">{{ t('trainee.closeNote') }}</p>{% endif %}
       {% endif %}
     </section>
     <section class="side">

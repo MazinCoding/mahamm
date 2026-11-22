@@ -3,6 +3,7 @@ import { audit } from '../audit.js';
 import { notify, notifyBatch } from '../notify.js';
 import { one, q, tx } from '../db.js';
 import { translator } from '../i18n.js';
+import { ADMIN_ROLES, TRAINEE_ASSIGN, TRAINEE_CLOSE, isAdmin, isTrainee } from '../roles.js';
 import { flagCloseMatch } from './matches.js';
 
 export const OPEN_STATUSES = ['backlog', 'todo', 'progress', 'review'];
@@ -239,12 +240,22 @@ export async function taskDetail(id) {
 
 export function canEdit(user, task) {
   if (!user) return false;
-  if (user.role === 'admin' || task.creator_id === user.id) return true;
+  if (isAdmin(user) || task.creator_id === user.id) return true;
   return (task.assignees || []).some((a) => a.id === user.id);
 }
 
+// Trainees can add and take off only themselves; other people stay as they are.
+export function assertTraineeAssigns(actor, before, requested) {
+  if (isTrainee(actor) && requested.some((u) => u !== actor.id && !before.includes(u))) throw new HttpError(403, TRAINEE_ASSIGN);
+}
+
+// Trainees never close tasks: their finished work goes to Review.
+export function assertCanClose(actor) {
+  if (isTrainee(actor)) throw new HttpError(403, TRAINEE_CLOSE);
+}
+
 export function canResolveFlags(user, task) {
-  return !!user && (user.role === 'admin' || task.creator_id === user.id);
+  return !!user && (isAdmin(user) || task.creator_id === user.id);
 }
 
 // Only active people can be assigned or credited; anything else is dropped.
@@ -261,6 +272,7 @@ async function existingLabelIds(db, ids) {
 }
 
 export async function createTask(data, actor, ip, file = null) {
+  assertTraineeAssigns(actor, [], data.assignees || []);
   return tx(async (db) => {
     const assignees = await activeIds(db, data.assignees);
     const labels = await existingLabelIds(db, data.labels);
@@ -309,9 +321,14 @@ export async function applyEdit(db, current, data, actor, ip, extra = {}) {
   }
 
   const before = (await db.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
+  assertTraineeAssigns(actor, before, data.assignees);
+  // A trainee only sees themselves in the picker, so everyone else stays assigned.
+  const wanted = isTrainee(actor)
+    ? [...before.filter((u) => u !== actor.id), ...data.assignees.filter((u) => u === actor.id)]
+    : data.assignees;
   // New assignees must be active; people already assigned stay if still ticked, even if since disabled.
-  const keep = before.filter((u) => data.assignees.includes(u));
-  const finalAssignees = [...new Set([...keep, ...(await activeIds(db, data.assignees))])];
+  const keep = before.filter((u) => wanted.includes(u));
+  const finalAssignees = [...new Set([...keep, ...(await activeIds(db, wanted))])];
   const added = finalAssignees.filter((u) => !before.includes(u));
   const removed = before.filter((u) => !finalAssignees.includes(u));
   if (added.length || removed.length) changes.assignees = { added, removed };
@@ -397,6 +414,7 @@ export const BULK_OPS = ['status', 'priority', 'label', 'assignee', 'due'];
 
 export async function bulkApply(ids, { op, value }, actor, ip) {
   if (!BULK_OPS.includes(op)) throw new HttpError(400, 'bad op');
+  if (op === 'assignee' && isTrainee(actor) && value !== actor.id) throw new HttpError(403, TRAINEE_ASSIGN);
   const batch = randomUUID();
   return tx(async (db) => {
     const { rows: found } = await db.query(
@@ -508,6 +526,7 @@ export async function tasksToClose(ids) {
 
 export async function bulkClose(ids, { reason, credits = {} }, actor, ip) {
   if (!BULK_CLOSE_REASONS.includes(reason)) throw new HttpError(400, 'bad reason');
+  assertCanClose(actor);
   const batch = randomUUID();
   return tx(async (db) => {
     const { rows: found } = await db.query('SELECT id, title, closed_at FROM tasks WHERE id = ANY($1::int[]) ORDER BY id FOR UPDATE', [ids]);
@@ -693,6 +712,7 @@ export async function joinTask(id, actor, ip, extra = {}) {
 
 export async function closeTask(id, { reason, credited = [], duplicateOf = null }, actor, ip) {
   if (!CLOSE_REASONS.includes(reason)) throw new HttpError(400, 'bad reason');
+  assertCanClose(actor);
   return tx(async (db) => {
     const task = await lockTask(db, id);
     if (task.closed_at) throw new HttpError(409, 'already closed');
@@ -812,7 +832,7 @@ export async function removeAttachment(attachmentId, taskId, actor, ip) {
     );
     const file = rows[0];
     if (!file) throw new HttpError(404, 'file not found');
-    if (actor.role !== 'admin' && file.uploader_id !== actor.id) throw new HttpError(403, 'not allowed');
+    if (!isAdmin(actor) && file.uploader_id !== actor.id) throw new HttpError(403, 'not allowed');
     await db.query('UPDATE attachments SET removed_at = now(), removed_by = $2 WHERE id = $1', [attachmentId, actor.id]);
     await audit(db, { actorId: actor.id, action: 'task.attachment_removed', taskId, details: { attachment_id: attachmentId, file: file.filename }, ip });
   });
@@ -836,7 +856,7 @@ export async function flagTask(id, { reason, note }, actor, ip, extra = {}) {
     // Tell whoever created the task; if they flagged it themselves, tell the admins.
     let recipients = [task.creator_id];
     if (task.creator_id === actor.id) {
-      recipients = (await db.query(`SELECT id FROM users WHERE role = 'admin' AND status = 'active'`)).rows.map((r) => r.id);
+      recipients = (await db.query(`SELECT id FROM users WHERE role = ANY($1::text[]) AND status = 'active' AND email IS NOT NULL`, [ADMIN_ROLES])).rows.map((r) => r.id);
     }
     await notify(db, { kind: 'flagged', taskId: id, task, actor, userIds: recipients });
     return rows[0];
@@ -847,7 +867,7 @@ export async function resolveFlag(taskId, flagId, resolution, actor, ip, extra =
   if (!['fixed', 'dismissed'].includes(resolution)) throw new HttpError(400, 'bad resolution');
   return tx(async (db) => {
     const task = await lockTask(db, taskId);
-    if (actor.role !== 'admin' && task.creator_id !== actor.id) throw new HttpError(403, 'not allowed');
+    if (!isAdmin(actor) && task.creator_id !== actor.id) throw new HttpError(403, 'not allowed');
     const { rows } = await db.query(
       `UPDATE flags SET resolved_at = now(), resolved_by = $3, resolution = $4
        WHERE id = $1 AND task_id = $2 AND resolved_at IS NULL RETURNING id`,

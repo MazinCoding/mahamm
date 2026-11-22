@@ -3,6 +3,7 @@ import { hashToken, newToken } from '../crypto.js';
 import { one, q, tx } from '../db.js';
 import { hashPassword } from '../passwords.js';
 import { signOutEverywhere } from '../auth.js';
+import { ADMIN_ROLES, canGrant, canManage, isAdminRole } from '../roles.js';
 import { HttpError } from './tasks.js';
 
 const INVITE_HOURS = 72;
@@ -31,16 +32,29 @@ async function assertNameFree(db, name, exceptId = null) {
   if (rows[0]) throw new HttpError(409, 'name taken');
 }
 
+// The person acting must outrank the person they act on, and can only give
+// levels below their own (see src/roles.js).
+function assertCanManage(actor, targetRole) {
+  if (!canManage(actor, targetRole)) throw new HttpError(403, 'outranked');
+}
+function assertCanGrant(actor, role) {
+  if (!canGrant(actor, role)) throw new HttpError(403, 'level not allowed');
+}
+
 // Adds someone by name only. They can be assigned and credited straight away,
-// and get an account later through an invite tied to them.
-export async function addPerson(name, actor, ip) {
+// and get an account later through an invite tied to them. Their level is kept
+// and offered again when they're invited.
+export async function addPerson(name, actor, ip, role = 'member') {
+  assertCanGrant(actor, role);
   return tx(async (db) => {
     await assertNameFree(db, name);
     const { rows } = await db.query(
-      `INSERT INTO users (name, email_notifications) VALUES ($1, false) RETURNING id, name`,
-      [name],
+      `INSERT INTO users (name, role, email_notifications) VALUES ($1, $2, false) RETURNING id, name, role`,
+      [name, role],
     );
-    await audit(db, { actorId: actor.id, action: 'person.added', subjectUserId: rows[0].id, details: { name }, ip });
+    const details = { name };
+    if (role !== 'member') details.role = role;
+    await audit(db, { actorId: actor.id, action: 'person.added', subjectUserId: rows[0].id, details, ip });
     return rows[0];
   });
 }
@@ -58,10 +72,11 @@ export async function findOrAddPerson(db, name, actor, ip, details = {}) {
 // Only names of people without an account; people with one set their own.
 export async function renamePerson(userId, name, actor, ip) {
   return tx(async (db) => {
-    const { rows } = await db.query('SELECT id, name, email FROM users WHERE id = $1 FOR UPDATE', [userId]);
+    const { rows } = await db.query('SELECT id, name, email, role FROM users WHERE id = $1 FOR UPDATE', [userId]);
     const target = rows[0];
     if (!target) throw new HttpError(404, 'user not found');
     if (target.email !== null) throw new HttpError(409, 'has account');
+    assertCanManage(actor, target.role);
     if (target.name === name) return;
     await assertNameFree(db, name, userId);
     await db.query('UPDATE users SET name = $2 WHERE id = $1', [userId, name]);
@@ -72,10 +87,12 @@ export async function renamePerson(userId, name, actor, ip) {
 // `userId` ties the invite to a person without an account; accepting it gives
 // that person their email and password instead of creating someone new.
 export async function createInvite(email, role, actor, ip, userId = null) {
+  assertCanGrant(actor, role);
   return tx(async (db) => {
     if (userId) {
-      const { rows } = await db.query('SELECT id, email, status FROM users WHERE id = $1 FOR UPDATE', [userId]);
+      const { rows } = await db.query('SELECT id, email, status, role FROM users WHERE id = $1 FOR UPDATE', [userId]);
       if (!rows[0]) throw new HttpError(404, 'user not found');
+      assertCanManage(actor, rows[0].role);
       if (rows[0].email !== null) throw new HttpError(409, 'has account');
       if (rows[0].status !== 'active') throw new HttpError(409, 'person disabled');
     }
@@ -155,10 +172,12 @@ export async function acceptInvite(token, { name, password }, ip) {
 export async function revokeInvite(inviteId, actor, ip) {
   return tx(async (db) => {
     const { rows } = await db.query(
-      'UPDATE invites SET revoked_at = now() WHERE id = $1 AND accepted_at IS NULL AND revoked_at IS NULL RETURNING email',
+      'SELECT id, email, role FROM invites WHERE id = $1 AND accepted_at IS NULL AND revoked_at IS NULL FOR UPDATE',
       [inviteId],
     );
     if (!rows[0]) throw new HttpError(404, 'invite not found');
+    assertCanManage(actor, rows[0].role);
+    await db.query('UPDATE invites SET revoked_at = now() WHERE id = $1', [inviteId]);
     await audit(db, { actorId: actor.id, action: 'invite.revoked', details: { invite_id: inviteId, email: rows[0].email }, ip });
   });
 }
@@ -205,10 +224,11 @@ export async function completeReset(token, password, ip) {
   return userId;
 }
 
-// There must always be at least one active admin.
+// There must always be at least one active admin (or executive, or superadmin) with an account.
 async function assertAnotherAdmin(db, userId) {
   const { rows } = await db.query(
-    `SELECT count(*)::int AS n FROM users WHERE role = 'admin' AND status = 'active' AND id <> $1`, [userId],
+    `SELECT count(*)::int AS n FROM users WHERE role = ANY($2::text[]) AND status = 'active' AND email IS NOT NULL AND id <> $1`,
+    [userId, ADMIN_ROLES],
   );
   if (rows[0].n === 0) throw new HttpError(409, 'last admin');
 }
@@ -218,10 +238,12 @@ export async function changeRole(userId, role, actor, ip) {
     const { rows } = await db.query('SELECT id, role, email FROM users WHERE id = $1 FOR UPDATE', [userId]);
     const target = rows[0];
     if (!target) throw new HttpError(404, 'user not found');
-    if (target.email === null) throw new HttpError(409, 'has no account');
-    if (target.role === role) return;
     if (target.id === actor.id) throw new HttpError(409, 'cannot change own role');
-    if (target.role === 'admin') await assertAnotherAdmin(db, userId);
+    assertCanManage(actor, target.role);
+    assertCanGrant(actor, role);
+    if (target.role === role) return;
+    if (target.email !== null && isAdminRole(target.role) && !isAdminRole(role)) await assertAnotherAdmin(db, userId);
+    // People without an account keep their level until their invite sets it.
     // A new admin is sent to two-step setup on their next request (see enforceAdminTwoFactor).
     await db.query('UPDATE users SET role = $2 WHERE id = $1', [userId, role]);
     await audit(db, { actorId: actor.id, action: 'user.role_changed', subjectUserId: userId, details: { from: target.role, to: role }, ip });
@@ -233,10 +255,11 @@ export async function setStatus(userId, status, actor, ip) {
     const { rows } = await db.query('SELECT id, name, email, role, status FROM users WHERE id = $1 FOR UPDATE', [userId]);
     const target = rows[0];
     if (!target) throw new HttpError(404, 'user not found');
+    if (target.id === actor.id) throw new HttpError(409, 'cannot disable yourself');
+    assertCanManage(actor, target.role);
     if (target.status === status) return;
     if (status === 'active' && target.email === null) await assertNameFree(db, target.name, userId);
-    if (target.id === actor.id) throw new HttpError(409, 'cannot disable yourself');
-    if (status === 'disabled' && target.role === 'admin') await assertAnotherAdmin(db, userId);
+    if (status === 'disabled' && target.email !== null && isAdminRole(target.role)) await assertAnotherAdmin(db, userId);
     await db.query('UPDATE users SET status = $2 WHERE id = $1', [userId, status]);
     await audit(db, { actorId: actor.id, action: status === 'disabled' ? 'user.disabled' : 'user.enabled', subjectUserId: userId, ip });
   });

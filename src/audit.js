@@ -107,7 +107,9 @@ function sentence(ev, t, { names = {}, labels = {} } = {}) {
     case 'invite.accepted':
       if (d.name_from) return t('ev.inviteAcceptedRenamed', { from: clip(d.name_from) });
       return t('ev.inviteAccepted');
-    case 'person.added': return t('ev.personAdded', { name: clip(d.name) });
+    case 'person.added': return d.role
+      ? t('ev.personAddedAs', { name: clip(d.name), role: t(`role.${d.role}`) })
+      : t('ev.personAdded', { name: clip(d.name) });
     case 'person.renamed': return t('ev.personRenamed', { from: clip(d.from), to: clip(d.to) });
     case 'user.role_changed': return t('ev.roleChanged', { person: who(ev.subject_user_id), role: t(`role.${d.to}`) });
     case 'user.disabled': return t('ev.userDisabled', { person: who(ev.subject_user_id) });

@@ -11,6 +11,7 @@ import { formatters, pickLang, translator } from './i18n.js';
 import { redactUrl } from './logger.js';
 import { RateLimited, limiter } from './ratelimit.js';
 import { httpsRedirect, sameOriginWrites, securityHeaders } from './security.js';
+import { TRAINEE_ASSIGN, TRAINEE_CLOSE, isAdmin, isTrainee } from './roles.js';
 import { rejectUnexpectedMultipart } from './uploads.js';
 import authRoutes from './routes/auth.js';
 import taskRoutes from './routes/tasks.js';
@@ -137,7 +138,7 @@ export function createApp(config, logger) {
     // Pages are personal; never let a shared or browser cache keep them.
     res.setHeader('Cache-Control', 'no-store');
     if (req.user) {
-      res.locals.user ={ id: req.user.id, name: req.user.name, role: req.user.role, isAdmin: req.user.role === 'admin' };
+      res.locals.user = { id: req.user.id, name: req.user.name, role: req.user.role, isAdmin: isAdmin(req.user), isTrainee: isTrainee(req.user) };
       const unread = await q('SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL', [req.user.id]);
       res.locals.unread = unread.rows[0].n;
     }
@@ -170,6 +171,8 @@ export function createApp(config, logger) {
       status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
     }
     if (err.code === 'EBADCSRFTOKEN') key = 'errors.csrf';
+    if (err.message === TRAINEE_CLOSE) key = 'trainee.closeNote';
+    if (err.message === TRAINEE_ASSIGN) key = 'trainee.assignNote';
     if (err instanceof RateLimited) res.setHeader('Retry-After', String(err.retryAfter));
     if (status < 400 || status > 599) status = 500;
     if (status >= 500) req.log?.error({ err }, 'request failed');
