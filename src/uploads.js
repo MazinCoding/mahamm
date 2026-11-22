@@ -1,5 +1,6 @@
 import path from 'node:path';
 import multer from 'multer';
+import { bindContext } from './db.js';
 import { fileTypeFromBuffer } from 'file-type';
 import { csrfProtection } from './auth.js';
 import { HttpError } from './services/tasks.js';
@@ -31,7 +32,10 @@ export function uploadThenCsrf(maxBytes) {
     storage: multer.memoryStorage(),
     limits: { fileSize: maxBytes, files: 1, fields: 60, fieldSize: 64 * 1024, parts: 70 },
   }).single('file');
-  return [upload, csrfProtection];
+  // Multer finishes on the upload stream's events, which lose the request's
+  // organization; carry it over explicitly.
+  const keepContext = (req, res, next) => upload(req, res, bindContext(next));
+  return [keepContext, csrfProtection];
 }
 
 export function safeFilename(name, ext) {

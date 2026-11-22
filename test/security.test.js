@@ -4,7 +4,7 @@ import { deflateSync } from 'node:zlib';
 import request from 'supertest';
 import { csvCell } from '../src/routes/admin.js';
 import { ConfigError, loadConfig } from '../src/config.js';
-import { q } from '../src/db.js';
+import { q } from './helpers.js';
 import { isBreached, passwordProblem } from '../src/passwords.js';
 import { safeLocalPath } from '../src/security.js';
 import { createUser, makeTask, post, resetLimits, setup, signIn, teardown, testEnv, tokenFor } from './helpers.js';

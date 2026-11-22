@@ -1,7 +1,7 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import { q } from '../src/db.js';
+import { q } from './helpers.js';
 import { guessMapping, mapStatus, matchPeople, parseDate } from '../src/services/import.js';
 import { createUser, csrfIn, resetLimits, setup, signIn, teardown, tokenFor } from './helpers.js';
 

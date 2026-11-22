@@ -6,7 +6,7 @@ import nunjucks from 'nunjucks';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'node:crypto';
 import { csrfToken, csrfUnlessMultipart, enforceAdminTwoFactor, loadUser, sessionMiddleware } from './auth.js';
-import { q } from './db.js';
+import { q, requestContext } from './db.js';
 import { formatters, pickLang, translator } from './i18n.js';
 import { redactUrl } from './logger.js';
 import { RateLimited, limiter } from './ratelimit.js';
@@ -104,10 +104,15 @@ export function createApp(config, logger) {
 
   app.use(express.urlencoded({ extended: false, limit: '100kb', parameterLimit: 300 }));
   app.use(express.json({ limit: '16kb' }));
+  // Every request from here on knows its organization once it's signed in (src/db.js).
+  app.use(requestContext);
   // Called by outside apps, not browsers: no session, no CSRF token.
   app.use(oauthApiRoutes(config));
   app.use(connectorRoutes(config));
   app.use(sessionMiddleware(config));
+  // A fresh context again after the session is loaded: the session store's
+  // callbacks can run in another request's context when the pool is busy.
+  app.use(requestContext);
   app.use(loadUser());
   app.use(rejectUnexpectedMultipart);
   app.use(sameOriginWrites(config));

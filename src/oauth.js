@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { audit } from './audit.js';
 import { hashToken, newToken } from './crypto.js';
-import { one, q, tx } from './db.js';
+import { asSystem, one, q, scopeTo, tx } from './db.js';
 import { rememberMs } from './devices.js';
 
 // Connected apps (OAuth 2.1 authorization code flow with PKCE, public clients).
@@ -125,8 +125,10 @@ async function revokeGrantIn(db, grantId) {
 // error is thrown after it commits.
 const REPLAYED = Symbol('replayed');
 
+// Codes and tokens are looked up across all organizations by their hash, then
+// the rest of the exchange runs in the organization they belong to.
 export async function exchangeCode({ clientId, code, redirectUri, codeVerifier, ip }) {
-  const result = await tx(async (db) => {
+  const result = await asSystem(() => tx(async (db) => {
     const { rows } = await db.query(
       `SELECT c.*, u.role, u.status, u.email FROM oauth_codes c JOIN users u ON u.id = c.user_id
        WHERE c.code_hash = $1 FOR UPDATE OF c`,
@@ -134,6 +136,7 @@ export async function exchangeCode({ clientId, code, redirectUri, codeVerifier, 
     );
     const row = rows[0];
     if (!row || row.client_id !== clientId) throw new OAuthError('invalid_grant', 'code not valid');
+    await scopeTo(db, row.org_id);
     if (row.used_at) {
       // A code used twice may have been stolen: end the connection it made.
       if (row.grant_id) await revokeGrantIn(db, row.grant_id);
@@ -154,15 +157,15 @@ export async function exchangeCode({ clientId, code, redirectUri, codeVerifier, 
     });
     const tokens = await issueTokens(db, grant.id, row.role, row.scope.split(' ').includes('offline_access'));
     return { ...tokens, scope: row.scope };
-  });
+  }));
   if (result === REPLAYED) throw new OAuthError('invalid_grant', 'code already used');
   return result;
 }
 
 export async function refreshTokens({ clientId, refreshToken }) {
-  const result = await tx(async (db) => {
+  const result = await asSystem(() => tx(async (db) => {
     const { rows } = await db.query(
-      `SELECT t.token_hash, t.expires_at, t.revoked_at, g.id AS grant_id, g.client_id, g.scope, g.revoked_at AS grant_revoked, u.role,
+      `SELECT t.token_hash, t.org_id, t.expires_at, t.revoked_at, g.id AS grant_id, g.client_id, g.scope, g.revoked_at AS grant_revoked, u.role,
               (${ACCOUNT_OK}) AS account_ok
        FROM oauth_tokens t JOIN oauth_grants g ON g.id = t.grant_id JOIN users u ON u.id = g.user_id
        WHERE t.token_hash = $1 AND t.kind = 'refresh' FOR UPDATE OF t`,
@@ -170,6 +173,7 @@ export async function refreshTokens({ clientId, refreshToken }) {
     );
     const row = rows[0];
     if (!row || row.client_id !== clientId) throw new OAuthError('invalid_grant', 'refresh token not valid');
+    await scopeTo(db, row.org_id);
     if (row.revoked_at) {
       // An old refresh token came back after it was replaced: it may have
       // been copied, so the whole connection ends.
@@ -183,7 +187,7 @@ export async function refreshTokens({ clientId, refreshToken }) {
     await db.query('UPDATE oauth_grants SET last_used_at = now() WHERE id = $1', [row.grant_id]);
     const tokens = await issueTokens(db, row.grant_id, row.role, true);
     return { ...tokens, scope: row.scope };
-  });
+  }));
   if (result === REPLAYED) throw new OAuthError('invalid_grant', 'refresh token not valid');
   return result;
 }
@@ -192,16 +196,18 @@ export async function refreshTokens({ clientId, refreshToken }) {
 // disconnected app, a disabled account or a password change stops it at once.
 export async function verifyAccessToken(token) {
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) return null;
-  const row = await one(
-    `SELECT g.id AS grant_id, g.scope, g.resource, g.last_used_at, u.id, u.email, u.name, u.role, u.status, u.lang
+  // Found across all organizations by the token's hash; the caller then works
+  // in the account's organization (user.org_id).
+  const row = await asSystem(() => one(
+    `SELECT g.id AS grant_id, g.scope, g.resource, g.last_used_at, u.id, u.org_id, u.email, u.name, u.role, u.status, u.lang
      FROM oauth_tokens t JOIN oauth_grants g ON g.id = t.grant_id JOIN users u ON u.id = g.user_id
      WHERE t.token_hash = $1 AND t.kind = 'access' AND t.revoked_at IS NULL AND t.expires_at > now()
        AND g.revoked_at IS NULL AND ${ACCOUNT_OK}`,
     [hashToken(token)],
-  );
+  ));
   if (!row) return null;
   if (Date.now() - new Date(row.last_used_at).getTime() > 5 * 60 * 1000) {
-    await q('UPDATE oauth_grants SET last_used_at = now() WHERE id = $1', [row.grant_id]);
+    await asSystem(() => q('UPDATE oauth_grants SET last_used_at = now() WHERE id = $1', [row.grant_id]));
   }
   const { grant_id: grantId, scope, resource, last_used_at: _lastUsed, ...user } = row;
   return { user, grantId, scope, resource };
@@ -245,7 +251,7 @@ export async function revokeAllGrants(userId) {
   });
 }
 
-export async function pruneOAuth() {
+async function pruneOAuthEverywhere() {
   await q(`DELETE FROM oauth_tokens WHERE expires_at < now() - interval '30 days' OR revoked_at < now() - interval '30 days'`);
   await q(`DELETE FROM oauth_codes WHERE expires_at < now() - interval '1 day'`);
   // Apps registered but never connected, after a month.
@@ -253,3 +259,6 @@ export async function pruneOAuth() {
            AND NOT EXISTS (SELECT 1 FROM oauth_grants g WHERE g.client_id = c.id)
            AND NOT EXISTS (SELECT 1 FROM oauth_codes o WHERE o.client_id = c.id)`);
 }
+
+// A background job: works across all organizations.
+export const pruneOAuth = (...args) => asSystem(() => pruneOAuthEverywhere(...args));

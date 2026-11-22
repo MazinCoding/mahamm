@@ -1,5 +1,5 @@
 import { hashToken, newToken } from './crypto.js';
-import { one, q } from './db.js';
+import { asSystem, one, q } from './db.js';
 import { isAdminRole } from './roles.js';
 
 // How long a remembered device (and a "keep me signed in" session) lasts.
@@ -100,6 +100,9 @@ export function clearDeviceCookie(res, config) {
   res.clearCookie(deviceCookieName(config), opts);
 }
 
-export async function pruneDevices() {
+async function pruneDevicesEverywhere() {
   await q(`DELETE FROM trusted_devices WHERE expires_at < now() - interval '30 days' OR forgotten_at < now() - interval '30 days'`);
 }
+
+// A background job: works across all organizations.
+export const pruneDevices = (...args) => asSystem(() => pruneDevicesEverywhere(...args));

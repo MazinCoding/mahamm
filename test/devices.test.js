@@ -1,7 +1,7 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
-import { q } from '../src/db.js';
+import { q } from './helpers.js';
 import { currentCode } from '../src/totp.js';
 import { PASSWORD, createUser, csrfIn, post, resetLimits, setup, teardown } from './helpers.js';
 

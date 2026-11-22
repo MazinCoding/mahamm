@@ -2,7 +2,7 @@ import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import request from 'supertest';
-import { q } from '../src/db.js';
+import { ORG1, inOrg, q } from './helpers.js';
 import { suggestedTasks } from '../src/services/tasks.js';
 import { createUser, csrfIn, post, resetLimits, setup, signIn, teardown } from './helpers.js';
 
@@ -158,7 +158,7 @@ describe('connector: creating tasks', () => {
     const token = await tokenFor(speaker);
     const { structuredContent: out } = await call(token, 'create_tasks', { tasks: [{ title: 'Move the archive room', assign_to_me: true, started: true, team_task: true }] });
     assert.equal(out.tasks[0].team_task, true);
-    const { rows } = await suggestedTasks(other.id, { limit: 50 });
+    const { rows } = await inOrg(ORG1, () => suggestedTasks(other.id, { limit: 50 }));
     const medium = rows.filter((t) => t.priority === 'med');
     assert.equal(medium[0].id, out.tasks[0].id);
     const agent = await signIn(app, other);

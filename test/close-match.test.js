@@ -1,7 +1,7 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
-import { q } from '../src/db.js';
+import { q } from './helpers.js';
 import { alike } from '../src/services/matches.js';
 import { connectApp, createUser, csrfIn, makeTask, post, resetLimits, setup, signIn, teardown } from './helpers.js';
 

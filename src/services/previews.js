@@ -1,5 +1,5 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { q, tx } from '../db.js';
+import { asSystem, q, tx } from '../db.js';
 import { closeTasks, createFromPreview, updateTasks } from './connector.js';
 import { isAdmin } from '../roles.js';
 import { getWipLimit, setWipLimit } from './settings.js';
@@ -100,6 +100,9 @@ export async function adminPreview(input, actor, opts) {
   return { changed: false, why: ['an admin change'], preview: await createPreview('admin', input, summary, actor, opts.origin) };
 }
 
-export async function prunePreviews() {
+async function prunePreviewsEverywhere() {
   await q(`DELETE FROM connector_previews WHERE expires_at < now() - interval '1 day'`);
 }
+
+// A background job: works across all organizations.
+export const prunePreviews = (...args) => asSystem(() => prunePreviewsEverywhere(...args));
