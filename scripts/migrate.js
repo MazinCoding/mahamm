@@ -13,6 +13,8 @@ export async function migrate(databaseUrl, sslOption = false, log = console.log)
   await client.connect();
   try {
     await client.query('SELECT pg_advisory_lock(727001)');
+    // Migrations work across all organizations (row-level security, migration 009/010).
+    await client.query("SELECT set_config('app.bypass', 'on', false)");
     await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (
       name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
     const done = new Set((await client.query('SELECT name FROM schema_migrations')).rows.map((r) => r.name));
