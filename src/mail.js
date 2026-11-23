@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { q } from './db.js';
+import { asSystem, q } from './db.js';
 
 let transport = null;
 let fromAddress = null;
@@ -74,7 +74,7 @@ export async function queueEmail(db, { to, subject, text, html }) {
   );
 }
 
-export async function processOutbox() {
+async function processOutboxEverywhere() {
   if (!transport) return 0;
   const { rows } = await q(
     `UPDATE email_outbox SET attempts = attempts + 1, next_attempt_at = now() + interval '5 minutes'
@@ -97,6 +97,12 @@ export async function processOutbox() {
   return rows.length;
 }
 
-export async function pruneOutbox() {
+async function pruneOutboxEverywhere() {
   await q(`DELETE FROM email_outbox WHERE status <> 'pending' AND created_at < now() - interval '30 days'`);
 }
+
+// A background job: works across all organizations.
+export const processOutbox = (...args) => asSystem(() => processOutboxEverywhere(...args));
+
+// A background job: works across all organizations.
+export const pruneOutbox = (...args) => asSystem(() => pruneOutboxEverywhere(...args));

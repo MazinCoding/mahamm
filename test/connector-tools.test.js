@@ -1,7 +1,7 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import request from 'supertest';
-import { q } from '../src/db.js';
+import { q } from './helpers.js';
 import { translator } from '../src/i18n.js';
 import { IP_LIMIT, PERSON_LIMIT } from '../src/routes/connector.js';
 import { addDays, localToday } from '../src/services/connector.js';

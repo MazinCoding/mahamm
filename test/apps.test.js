@@ -5,7 +5,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { signOutEverywhere } from '../src/auth.js';
 import { loadConfig } from '../src/config.js';
-import { q } from '../src/db.js';
+import { ORG1, inOrg, q } from './helpers.js';
 import { createLogger } from '../src/logger.js';
 import { verifyAccessToken } from '../src/oauth.js';
 import { createUser, post, resetLimits, setup, signIn, teardown, testEnv } from './helpers.js';
@@ -266,7 +266,7 @@ describe('connected apps: tokens', () => {
 
     const changed = await createUser();
     const b = await connect(changed);
-    await signOutEverywhere(changed.id);
+    await inOrg(ORG1, () => signOutEverywhere(changed.id));
     assert.equal(await verifyAccessToken(b.tokens.access_token), null);
   });
 });

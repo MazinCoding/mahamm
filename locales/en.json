@@ -64,7 +64,7 @@
     "mistake": "It shouldn’t have been created."
   },
   "role": {
-    "superadmin": "Superadmin",
+    "superadmin": "Owner",
     "executive": "Executive",
     "admin": "Admin",
     "member": "Member",
@@ -560,7 +560,7 @@
     "confirmDisablePerson": "Disable {name}? They’ll leave the pickers but stay on their past tasks.",
     "outranked": "You can only do that for people below your level.",
     "levelNotAllowed": "You can only give levels below your own.",
-    "levelsHint": "From highest: Superadmin, Executive, Admin, Member, Trainee. You can manage people below your level and give them any level below yours. Trainees can’t assign other people or close tasks."
+    "levelsHint": "From highest: Owner, Executive, Admin, Member, Trainee. You can manage people below your level and give them any level below yours. Trainees can’t assign other people or close tasks."
   },
   "labels": {
     "title": "Labels",

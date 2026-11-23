@@ -18,7 +18,7 @@ export async function setWipLimit(value, fallback, actor, ip) {
     if (from === value) return { changed: false };
     await db.query(
       `INSERT INTO app_settings (key, value, updated_at, updated_by) VALUES ('wip_limit', $1, now(), $2)
-       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by`,
+       ON CONFLICT (org_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now(), updated_by = EXCLUDED.updated_by`,
       [JSON.stringify(value), actor.id],
     );
     await audit(db, { actorId: actor.id, action: 'settings.wip_limit_changed', details: { from, to: value }, ip });

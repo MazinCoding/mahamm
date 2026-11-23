@@ -1,12 +1,14 @@
 import { audit } from '../audit.js';
 import { hashToken, newToken } from '../crypto.js';
-import { one, q, tx } from '../db.js';
+import { asSystem, one, q, tx } from '../db.js';
 import { hashPassword } from '../passwords.js';
 import { signOutEverywhere } from '../auth.js';
 import { ADMIN_ROLES, canGrant, canManage, isAdminRole } from '../roles.js';
 import { HttpError } from './tasks.js';
 
 const INVITE_HOURS = 72;
+
+const emailTaken = async (email) => !!(await asSystem(() => one('SELECT 1 FROM users WHERE email = $1', [email])));
 
 export async function userCount() {
   return (await one('SELECT count(*)::int AS n FROM users')).n;
@@ -96,8 +98,8 @@ export async function createInvite(email, role, actor, ip, userId = null) {
       if (rows[0].email !== null) throw new HttpError(409, 'has account');
       if (rows[0].status !== 'active') throw new HttpError(409, 'person disabled');
     }
-    const existing = await db.query('SELECT 1 FROM users WHERE email = $1', [email]);
-    if (existing.rows[0]) throw new HttpError(409, 'already a member');
+    // Emails are unique across all organizations (one account, one organization).
+    if (await emailTaken(email)) throw new HttpError(409, 'already a member');
     await db.query(
       `UPDATE invites SET revoked_at = now()
        WHERE (email = $1 OR ($2::uuid IS NOT NULL AND user_id = $2)) AND accepted_at IS NULL AND revoked_at IS NULL`,
@@ -122,7 +124,7 @@ const LIVE_INVITE = `i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expire
 
 export async function findInvite(token) {
   return one(
-    `SELECT i.id, i.email, i.role, i.expires_at, i.user_id, u.name AS invited_by_name, p.name AS person_name
+    `SELECT i.id, i.org_id, i.email, i.role, i.expires_at, i.user_id, u.name AS invited_by_name, p.name AS person_name
      FROM invites i JOIN users u ON u.id = i.invited_by LEFT JOIN users p ON p.id = i.user_id
      WHERE i.token_hash = $1 AND ${LIVE_INVITE}`,
     [hashToken(token)],
@@ -141,8 +143,7 @@ export async function acceptInvite(token, { name, password }, ip) {
     );
     const invite = rows[0];
     if (!invite) throw new HttpError(410, 'invite not valid');
-    const exists = await db.query('SELECT 1 FROM users WHERE email = $1', [invite.email]);
-    if (exists.rows[0]) throw new HttpError(409, 'already a member');
+    if (await emailTaken(invite.email)) throw new HttpError(409, 'already a member');
     let user;
     const details = { invite_id: invite.id };
     if (invite.user_id) {
@@ -198,7 +199,7 @@ export async function createReset(userId, createdBy, hours, ip) {
 
 export async function findReset(token) {
   return one(
-    `SELECT r.id, r.user_id, u.email, u.name FROM password_resets r JOIN users u ON u.id = r.user_id
+    `SELECT r.id, r.org_id, r.user_id, u.email, u.name FROM password_resets r JOIN users u ON u.id = r.user_id
      WHERE r.token_hash = $1 AND r.used_at IS NULL AND r.expires_at > now() AND u.status = 'active' AND u.email IS NOT NULL`,
     [hashToken(token)],
   );

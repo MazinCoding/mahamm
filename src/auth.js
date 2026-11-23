@@ -1,7 +1,7 @@
 import session from 'express-session';
 import connectPgSimple from 'connect-pg-simple';
 import { csrfSync } from 'csrf-sync';
-import { getPool, q } from './db.js';
+import { asSystem, getPool, q, setOrg } from './db.js';
 import { forgetAllDevices, rememberMs } from './devices.js';
 import { revokeAllGrants } from './oauth.js';
 import { isAdmin } from './roles.js';
@@ -45,7 +45,7 @@ export function csrfUnlessMultipart(req, res, next) {
   return csrfProtection(req, res, next);
 }
 
-const USER_COLUMNS = 'id, email, name, role, status, lang, email_notifications, totp_enabled, password_changed_at, last_seen_at';
+const USER_COLUMNS = 'id, org_id, email, name, role, status, lang, email_notifications, totp_enabled, password_changed_at, last_seen_at';
 
 export async function findUserById(id) {
   const { rows } = await q(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [id]);
@@ -104,8 +104,16 @@ export async function signOutEverywhere(userId, exceptSid = null) {
 export function loadUser() {
   return async function load(req, res, next) {
     const id = req.session?.userId;
-    if (!id) return next();
-    const user = await findUserById(id);
+    if (!id) {
+      // Between the password and the two-step code, the request works in that
+      // person's organization so the code can be checked.
+      const pending = req.session?.pendingUserId ? await asSystem(() => findUserById(req.session.pendingUserId)) : null;
+      if (pending) setOrg(pending.org_id);
+      return next();
+    }
+    // The account is found across all organizations; everything after this
+    // runs in its organization only.
+    const user = await asSystem(() => findUserById(id));
     const tooOld = !req.session.createdAt || !user || Date.now() - req.session.createdAt > lifetimeMs(req.session, user.role);
     const stale = !user || req.session.pwv !== new Date(user.password_changed_at).toISOString();
     if (!user || user.status !== 'active' || !user.email || tooOld || stale) {
@@ -117,6 +125,7 @@ export function loadUser() {
       return next();
     }
     req.user = user;
+    setOrg(user.org_id);
     if (!req.session.seenAt || Date.now() - req.session.seenAt > 5 * 60 * 1000) {
       req.session.seenAt = Date.now();
       await q('UPDATE users SET last_seen_at = now() WHERE id = $1', [user.id]);

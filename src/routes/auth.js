@@ -3,7 +3,7 @@ import { audit } from '../audit.js';
 import { destroySession, startPendingSession, startSession } from '../auth.js';
 import { rememberDays, rememberDevice, validDevice } from '../devices.js';
 import { decryptField, hashRecoveryCode, hashToken, safeEqual } from '../crypto.js';
-import { one, q, tx } from '../db.js';
+import { asSystem, one, q, scopeTo, setOrg, tx } from '../db.js';
 import { LANGS, translator } from '../i18n.js';
 import { composeEmail, mailEnabled, sendNow } from '../mail.js';
 import { equaliseTiming, hashPassword, needsRehash, passwordProblem, verifyPassword, MAX_LENGTH } from '../passwords.js';
@@ -27,7 +27,7 @@ export default function authRoutes(config) {
 
   r.get('/login', async (req, res) => {
     if (req.user) return res.redirect('/home');
-    if ((await userCount()) === 0) return res.redirect('/setup');
+    if ((await asSystem(userCount)) === 0) return res.redirect('/setup');
     res.render('auth/login.njk', { next: safeLocalPath(req.query.next, ''), email: '' });
   });
 
@@ -42,9 +42,12 @@ export default function authRoutes(config) {
     const failKey = `login-fail:${hashToken(email)}`;
     if ((await peek(failKey)).count >= MAX_FAILS) return fail('auth.paused', 429);
 
+    // Emails are unique across the whole app, so the account is found first
+    // and the rest of the sign-in runs in its organization.
     const user = email
-      ? await one('SELECT id, email, name, role, password_hash, status, totp_enabled, password_changed_at FROM users WHERE email = $1', [email])
+      ? await asSystem(() => one('SELECT id, org_id, email, name, role, password_hash, status, totp_enabled, password_changed_at FROM users WHERE email = $1', [email]))
       : null;
+    if (user) setOrg(user.org_id);
     let ok = false;
     if (user && user.status === 'active' && user.password_hash) ok = await verifyPassword(user.password_hash, password);
     else await equaliseTiming(password);
@@ -159,7 +162,8 @@ export default function authRoutes(config) {
     if (email) {
       try {
         await enforce(`forgot-email:${hashToken(email)}`, 3, 3600);
-        const user = await one(`SELECT id, email, name, lang FROM users WHERE email = $1 AND status = 'active'`, [email]);
+        const user = await asSystem(() => one(`SELECT id, org_id, email, name, lang FROM users WHERE email = $1 AND status = 'active'`, [email]));
+        if (user) setOrg(user.org_id);
         if (user && mailEnabled()) {
           const token = await createReset(user.id, null, 1, req.ip);
           const t = translator(user.lang);
@@ -182,15 +186,16 @@ export default function authRoutes(config) {
   });
 
   r.get('/reset/:token', async (req, res) => {
-    const reset = await findReset(req.params.token);
+    const reset = await asSystem(() => findReset(req.params.token));
     if (!reset) return res.status(410).render('auth/message.njk', { title: req.t('auth.linkExpiredTitle'), body: req.t('auth.linkExpired') });
     res.render('auth/reset.njk', { token: req.params.token });
   });
 
   r.post('/reset/:token', async (req, res) => {
     await enforce(`reset-ip:${req.ip}`, 20, 3600);
-    const reset = await findReset(req.params.token);
+    const reset = await asSystem(() => findReset(req.params.token));
     if (!reset) return res.status(410).render('auth/message.njk', { title: req.t('auth.linkExpiredTitle'), body: req.t('auth.linkExpired') });
+    setOrg(reset.org_id);
     const password = readPassword(req.body.password);
     if (password !== readPassword(req.body.confirm)) {
       return res.status(400).render('auth/reset.njk', { token: req.params.token, error: req.t('password.mismatch') });
@@ -203,15 +208,16 @@ export default function authRoutes(config) {
   });
 
   r.get('/invite/:token', async (req, res) => {
-    const invite = await findInvite(req.params.token);
+    const invite = await asSystem(() => findInvite(req.params.token));
     if (!invite) return res.status(410).render('auth/message.njk', { title: req.t('auth.linkExpiredTitle'), body: req.t('auth.inviteExpired') });
     res.render('auth/invite.njk', { token: req.params.token, invite, name: invite.person_name || '' });
   });
 
   r.post('/invite/:token', async (req, res) => {
     await enforce(`invite-ip:${req.ip}`, 20, 3600);
-    const invite = await findInvite(req.params.token);
+    const invite = await asSystem(() => findInvite(req.params.token));
     if (!invite) return res.status(410).render('auth/message.njk', { title: req.t('auth.linkExpiredTitle'), body: req.t('auth.inviteExpired') });
+    setOrg(invite.org_id);
     const nameResult = parse(nameField, req.body.name);
     const password = readPassword(req.body.password);
     const again = (error) => res.status(400).render('auth/invite.njk', { token: req.params.token, invite, name: cleanLine(req.body.name).slice(0, 100), error });
@@ -237,13 +243,13 @@ export default function authRoutes(config) {
   // First-run setup: only works while there are no users, and only with SETUP_TOKEN.
   // The account made here is the superadmin.
   r.get('/setup', async (req, res) => {
-    if ((await userCount()) > 0) throw new HttpError(404);
+    if ((await asSystem(userCount)) > 0) throw new HttpError(404);
     res.render('auth/setup.njk', { enabled: !!config.setupToken, name: '', email: '' });
   });
 
   r.post('/setup', async (req, res) => {
     await enforce(`setup-ip:${req.ip}`, 10, 3600);
-    if ((await userCount()) > 0 || !config.setupToken) throw new HttpError(404);
+    if ((await asSystem(userCount)) > 0 || !config.setupToken) throw new HttpError(404);
     const name = cleanLine(req.body.name).slice(0, 100);
     const emailRaw = cleanLine(req.body.email).toLowerCase().slice(0, 254);
     const again = (error, status = 400) => res.status(status).render('auth/setup.njk', { enabled: true, name, email: emailRaw, error });
@@ -256,18 +262,22 @@ export default function authRoutes(config) {
     const problem = await passwordProblem(password, { email: e.data, name: n.data, breachCheck: config.breachCheck });
     if (problem) return again(req.t(problem));
     const hash = await hashPassword(password);
-    const user = await tx(async (db) => {
+    // The first account goes into the first organization (organization #1).
+    const user = await asSystem(() => tx(async (db) => {
       await db.query('LOCK TABLE users IN EXCLUSIVE MODE');
       const count = await db.query('SELECT count(*)::int AS n FROM users');
       if (count.rows[0].n > 0) throw new HttpError(404);
+      const org = (await db.query('SELECT id FROM organizations ORDER BY created_at LIMIT 1')).rows[0];
+      await scopeTo(db, org.id);
       const created = (await db.query(
         `INSERT INTO users (email, name, password_hash, role, lang) VALUES ($1, $2, $3, 'superadmin', $4)
-         RETURNING id, email, name, role, password_changed_at`,
+         RETURNING id, org_id, email, name, role, password_changed_at`,
         [e.data, n.data, hash, req.lang],
       )).rows[0];
       await audit(db, { actorId: created.id, action: 'setup.completed', subjectUserId: created.id, ip: req.ip });
       return created;
-    });
+    }));
+    setOrg(user.org_id);
     await startSession(req, user);
     res.redirect('/settings/two-factor');
   });

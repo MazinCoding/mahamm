@@ -1,9 +1,10 @@
+import { createHash } from 'node:crypto';
 import pg from 'pg';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import { encryptField, initCrypto } from '../src/crypto.js';
-import { closeDb, initDb, q } from '../src/db.js';
+import { asSystem, closeDb, initDb, q as dbq, withOrg } from '../src/db.js';
 import { createLogger } from '../src/logger.js';
 import { setTransport } from '../src/mail.js';
 import { initNotify } from '../src/notify.js';
@@ -24,15 +25,38 @@ export const testEnv = {
   APP_URL: 'http://localhost:3000',
 };
 
+// Organization #1, created by migration 009; the tests' people and tasks live there.
+export const ORG1 = '00000000-0000-4000-8000-000000000001';
+
+// The app under test connects as a role that is not a superuser and doesn't own
+// the tables, so row-level security applies to it exactly as it does to the
+// live app after migration 010 forces it. Its password is derived from the
+// test database address, so nothing secret is written here.
+const APP_ROLE = 'mahamm_rls_test';
+function appDatabaseUrl() {
+  const url = new URL(TEST_DB);
+  url.username = APP_ROLE;
+  url.password = createHash('sha256').update(`${TEST_DB}:${APP_ROLE}`).digest('hex');
+  return { url: url.toString(), password: url.password };
+}
+
 // Fresh schema for each test file, then the real migrations.
 export async function setup(envOverrides = {}) {
   const admin = new pg.Client({ connectionString: TEST_DB });
   await admin.connect();
   await admin.query('DROP SCHEMA IF EXISTS public CASCADE');
   await admin.query('CREATE SCHEMA public');
-  await admin.end();
   await migrate(TEST_DB, false, () => {});
-  const config = loadConfig({ ...testEnv, ...envOverrides });
+  const appDb = appDatabaseUrl();
+  await admin.query(`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${APP_ROLE}') THEN CREATE ROLE ${APP_ROLE} LOGIN NOSUPERUSER NOBYPASSRLS; END IF;
+  END $$`);
+  await admin.query(`ALTER ROLE ${APP_ROLE} PASSWORD '${appDb.password}'`);
+  await admin.query(`GRANT USAGE ON SCHEMA public TO ${APP_ROLE}`);
+  await admin.query(`GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO ${APP_ROLE}`);
+  await admin.query(`GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO ${APP_ROLE}`);
+  await admin.end();
+  const config = loadConfig({ ...testEnv, DATABASE_URL: appDb.url, ...envOverrides });
   const logger = createLogger(config);
   initDb(config, logger);
   initCrypto(config.dataKey);
@@ -43,6 +67,11 @@ export async function setup(envOverrides = {}) {
   return { app, config, sent };
 }
 
+// Tests read and write the database directly as the system (all organizations),
+// like a background job would. Requests to the app still run in one organization.
+export const q = (text, params) => asSystem(() => dbq(text, params));
+export const inOrg = (orgId, fn) => withOrg(orgId, fn);
+
 export async function teardown() {
   await closeDb();
 }
@@ -52,13 +81,13 @@ export async function resetLimits() {
 }
 
 let n = 0;
-export async function createUser({ name, email, role = 'member', status = 'active', twoFactor = false } = {}) {
+export async function createUser({ name, email, role = 'member', status = 'active', twoFactor = false, org = ORG1 } = {}) {
   n += 1;
   const totpSecret = twoFactor ? newTotpSecret() : null;
   const { rows } = await q(
-    `INSERT INTO users (email, name, password_hash, role, status, totp_enabled, totp_secret_enc)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, email, name, role`,
-    [email || `person${n}@example.com`, name || `Person Number${n}`, await hashPassword(PASSWORD), role, status, twoFactor, totpSecret ? encryptField(totpSecret) : null],
+    `INSERT INTO users (email, name, password_hash, role, status, totp_enabled, totp_secret_enc, org_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, email, name, role, org_id`,
+    [email || `person${n}@example.com`, name || `Person Number${n}`, await hashPassword(PASSWORD), role, status, twoFactor, totpSecret ? encryptField(totpSecret) : null, org],
   );
   return { ...rows[0], totpSecret };
 }

@@ -1,4 +1,5 @@
 import express from 'express';
+import { setOrg } from '../db.js';
 import { SCOPES, verifyAccessToken } from '../oauth.js';
 import { enforce } from '../ratelimit.js';
 import { updateCaptured } from '../services/capture.js';
@@ -585,6 +586,7 @@ export function connectorRoutes(config) {
       res.setHeader('Allow', 'POST');
       return res.status(405).json({ error: 'method not allowed' });
     }
+    setOrg(auth.user.org_id);
     await enforce(`connector:${auth.user.id}`, PERSON_LIMIT, WINDOW);
     await enforce('connector:all', TEAM_LIMIT, WINDOW);
 

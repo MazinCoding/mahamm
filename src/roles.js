@@ -5,7 +5,9 @@
 //   member     – the usual rights.
 //   admin      – people, invites, labels, import, the in-progress limit, any task.
 //   executive  – an admin who can also manage admins.
-//   superadmin – one account; can also manage executives. Nobody can change it.
+//   superadmin – shown as "Owner": one per organization; can also manage executives.
+//                Nobody can change it. (Separate from the platform admin, who runs
+//                the whole app and isn't part of any organization.)
 //
 // The rule for managing people is the same at every level: you can act on people
 // below you, and give them any level below yours.
