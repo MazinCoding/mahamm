@@ -90,19 +90,41 @@ describe('the website keeps organizations apart', () => {
     assert.ok([403, 404].includes(comment.status), String(comment.status));
     await post(agentB, '/tasks/bulk', { ids: [taskA], apply: 'status:progress', back: '/table' }, '/table');
     await post(agentB, `/tasks/${taskA}/join`, {}, '/home');
-    const row = (await q('SELECT status FROM tasks WHERE id = $1', [taskA])).rows[0];
+    const row = (await q('SELECT status FROM tasks WHERE org_id = $1 AND id = $2', [ORG1, taskA])).rows[0];
     assert.equal(row.status, 'todo');
-    assert.equal((await q('SELECT count(*)::int AS n FROM comments WHERE task_id = $1', [taskA])).rows[0].n, 0);
+    assert.equal((await q('SELECT count(*)::int AS n FROM comments WHERE org_id = $1 AND task_id = $2', [ORG1, taskA])).rows[0].n, 0);
     assert.equal((await q('SELECT count(*)::int AS n FROM task_assignees WHERE task_id = $1 AND user_id = $2', [taskA, ownerB.id])).rows[0].n, 0);
   });
 
   test('people of another organization can\'t be assigned', async () => {
     const id = await makeTask(agentB, { title: 'Bravo task', assignees: [memberB.id, memberA.id] });
-    const people = (await q('SELECT user_id FROM task_assignees WHERE task_id = $1', [id])).rows.map((r) => r.user_id);
+    const people = (await q('SELECT user_id FROM task_assignees WHERE org_id = $1 AND task_id = $2', [ORG2, id])).rows.map((r) => r.user_id);
     assert.deepEqual(people, [memberB.id]);
-    assert.equal((await q('SELECT org_id FROM tasks WHERE id = $1', [id])).rows[0].org_id, ORG2);
-    const ev = (await q(`SELECT org_id FROM audit_events WHERE task_id = $1 LIMIT 1`, [id])).rows[0];
-    assert.equal(ev.org_id, ORG2);
+    assert.equal((await q(`SELECT count(*)::int AS n FROM audit_events WHERE org_id = $1 AND task_id = $2 AND action = 'task.created'`, [ORG2, id])).rows[0].n, 1);
+  });
+
+  test('each company numbers its tasks from #1, and #N always means your own', async () => {
+    const bFirst = (await q(`SELECT min(id)::int AS n FROM tasks WHERE org_id = $1`, [ORG2])).rows[0].n;
+    assert.equal(bFirst, 1);
+    assert.equal(taskA, 1, 'the first company also started at #1');
+    const second = await makeTask(agentA, { title: 'Alpha second' });
+    assert.equal(second, 2);
+    const asB = await agentB.get('/tasks/1');
+    assert.equal(asB.status, 200);
+    assert.match(asB.text, /Bravo task/);
+    assert.doesNotMatch(asB.text, /Alpha secret plan/);
+    const asA = await agentA.get('/tasks/1');
+    assert.match(asA.text, /Alpha secret plan/);
+    assert.doesNotMatch(asA.text, /Bravo task/);
+    // Changing your #1 doesn't touch the other company's #1.
+    await post(agentB, '/tasks/bulk', { ids: [1], apply: 'status:progress', back: '/table' }, '/table');
+    const statuses = (await q('SELECT org_id, status FROM tasks WHERE id = 1 ORDER BY org_id')).rows;
+    assert.deepEqual(statuses.map((r) => [r.org_id, r.status]), [[ORG1, 'todo'], [ORG2, 'progress']]);
+  });
+
+  test('two tasks added at the same moment get different numbers', async () => {
+    const ids = await Promise.all([1, 2, 3, 4, 5].map((n) => makeTask(agentB, { title: `Same moment ${n}` })));
+    assert.equal(new Set(ids).size, 5);
   });
 
   test('settings belong to each organization', async () => {
