@@ -5,7 +5,7 @@ import multer from 'multer';
 import nunjucks from 'nunjucks';
 import pinoHttp from 'pino-http';
 import { randomUUID } from 'node:crypto';
-import { csrfToken, csrfUnlessMultipart, enforceAdminTwoFactor, loadUser, sessionMiddleware } from './auth.js';
+import { MAX_ACCOUNTS, csrfToken, csrfUnlessMultipart, enforceAdminTwoFactor, loadUser, otherAccounts, sessionMiddleware } from './auth.js';
 import { q, requestContext } from './db.js';
 import { formatters, pickLang, translator } from './i18n.js';
 import { redactUrl } from './logger.js';
@@ -141,10 +141,19 @@ export function createApp(config, logger) {
     res.locals.fileSize = (bytes) => (bytes >= 1048576 ? `${(bytes / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
     res.locals.flash = req.session?.flash || null;
     if (req.session?.flash) delete req.session.flash;
+    // Set where no translator was available yet (loadUser).
+    if (req.session?.flashKey) {
+      res.locals.flash = { type: 'warn', text: t(req.session.flashKey) };
+      delete req.session.flashKey;
+    }
     // Pages are personal; never let a shared or browser cache keep them.
     res.setHeader('Cache-Control', 'no-store');
     if (req.user) {
-      res.locals.user = { id: req.user.id, name: req.user.name, role: req.user.role, isAdmin: isAdmin(req.user), isTrainee: isTrainee(req.user) };
+      res.locals.user = {
+        id: req.user.id, name: req.user.name, role: req.user.role, isAdmin: isAdmin(req.user), isTrainee: isTrainee(req.user), orgName: req.user.org_name,
+      };
+      res.locals.accounts = otherAccounts(req);
+      res.locals.maxAccounts = MAX_ACCOUNTS;
       const unread = await q('SELECT count(*)::int AS n FROM notifications WHERE user_id = $1 AND read_at IS NULL', [req.user.id]);
       res.locals.unread = unread.rows[0].n;
     }

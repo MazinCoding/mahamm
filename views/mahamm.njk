@@ -55,10 +55,7 @@
       <span class="menu-text"><span class="menu-name"><bdi>{{ user.name }}</bdi></span><span class="menu-desc">{{ t('menu.settings') }}</span></span>
       <svg class="menu-go flip" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
     </a>
-    <form method="post" action="/logout" class="menu-signout">
-      <input type="hidden" name="_csrf" value="{{ csrfToken }}">
-      <button class="btn btn-secondary btn-block" type="submit">{{ t('nav.signOut') }}</button>
-    </form>
+    <div class="menu-accounts">{% include "_accounts.njk" %}</div>
   </div>
 </div>
 {% endblock %}

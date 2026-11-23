@@ -1114,5 +1114,20 @@
     "active": "Active",
     "suspended": "Suspended",
     "rejected": "Turned down"
+  },
+  "accounts": {
+    "menu": "Accounts",
+    "switchTo": "Switch to",
+    "add": "Add another account",
+    "addTitle": "Add another account",
+    "addSub": "Sign in to another Mahamm account, for example at another company. You stay signed in to this one too.",
+    "cancel": "Cancel",
+    "signOutThis": "Sign out of this account",
+    "signOutAll": "Sign out of all accounts",
+    "signedOutOne": "Signed out of {name}. You’re still signed in to your other accounts.",
+    "droppedOne": "One of your accounts was signed out (its password changed, it was turned off, or it was signed in too long). You’re still signed in to the others.",
+    "notSignedIn": "That account isn’t signed in here any more.",
+    "full": "You can be signed in to {n} accounts at most. Sign out of one first.",
+    "unknown": "Account"
   }
 }
