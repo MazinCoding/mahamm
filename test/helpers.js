@@ -135,8 +135,9 @@ export async function makeTask(agent, fields = {}) {
   return id;
 }
 
-export async function auditFor(taskId) {
-  return (await q('SELECT action, actor_id, details FROM audit_events WHERE task_id = $1 ORDER BY id', [taskId])).rows;
+// Task numbers are per company, so direct queries name the company too.
+export async function auditFor(taskId, org = ORG1) {
+  return (await q('SELECT action, actor_id, details FROM audit_events WHERE org_id = $2 AND task_id = $1 ORDER BY id', [taskId, org])).rows;
 }
 
 // Connects `user` the way an outside app would (registration, consent, code
