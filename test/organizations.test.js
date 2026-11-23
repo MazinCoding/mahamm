@@ -8,7 +8,7 @@ const RETURN = 'https://app.example.test/callback';
 const ORG2 = '00000000-0000-4000-8000-000000000002';
 // Tables that are shared by the whole app on purpose. Every other table must
 // belong to an organization.
-const GLOBAL_TABLES = ['organizations', 'rate_limits', 'oauth_clients', 'session', 'schema_migrations'];
+const GLOBAL_TABLES = ['organizations', 'rate_limits', 'oauth_clients', 'session', 'schema_migrations', 'platform_admins', 'platform_audit'];
 
 let app;
 let ownerA; let memberA; let agentA;

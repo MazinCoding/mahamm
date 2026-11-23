@@ -1,0 +1,30 @@
+{% extends "bare.njk" %}
+{% block wrap %}wide{% endblock %}
+{% block title %}{{ t('platform.title') }}{% endblock %}
+{% block content %}
+{% include "platform/_bar.njk" %}
+<h1>{{ t('platform.title') }}</h1>
+<p class="sub">{{ t('platform.sub') }}</p>
+<div class="table-wrap">
+<table class="table">
+  <thead><tr>
+    <th>{{ t('platform.company') }}</th><th>{{ t('platform.plan') }}</th><th>{{ t('platform.status') }}</th>
+    <th>{{ t('platform.people') }}</th><th>{{ t('platform.openTasks') }}</th><th>{{ t('platform.created') }}</th>
+  </tr></thead>
+  <tbody>
+  {% for c in companies %}
+    <tr>
+      <td><a href="/platform/companies/{{ c.id }}" dir="auto">{{ c.name }}</a></td>
+      <td>{{ t('plan.' + c.plan) }}</td>
+      <td><span class="chip {{ {'pending': 'c-amber', 'active': 'c-green', 'suspended': 'c-red', 'rejected': 'c-gray'}[c.status] }}">{{ t('companyStatus.' + c.status) }}</span></td>
+      <td>{{ c.people }}</td>
+      <td>{{ c.open_tasks }}</td>
+      <td class="nowrap">{{ fmt.day(c.created_at) }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">{{ t('platform.none') }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

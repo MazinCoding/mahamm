@@ -26,6 +26,8 @@ services:
         generateValue: true
       - key: SETUP_TOKEN
         generateValue: true
+      - key: PLATFORM_SETUP_TOKEN
+        sync: false
       - key: APP_TIMEZONE
         value: Asia/Muscat
       # Email is optional. Leave these empty to start; invite and reset links

@@ -397,7 +397,10 @@
     "appsDisconnected": "disconnected all apps ({count})",
     "teamTaskOn": "made a team task",
     "teamTaskOff": "no longer a team task",
-    "personAddedAs": "added {name} without an account, as {role}"
+    "personAddedAs": "added {name} without an account, as {role}",
+    "orgRenamed": "renamed the company from {from} to {to}",
+    "orgPlanChanged": "changed the plan from {from} to {to}",
+    "orgStatusChanged": "changed the company’s status from {from} to {to}"
   },
   "act": {
     "task": {
@@ -452,6 +455,11 @@
     "person": {
       "added": "Person added",
       "renamed": "Person renamed"
+    },
+    "org": {
+      "renamed": "Company renamed",
+      "plan_changed": "Plan changed",
+      "status_changed": "Company status"
     }
   },
   "notify": {
@@ -698,7 +706,10 @@
     "nameTaken": "Someone active already uses that name. Add a surname or initial.",
     "keepSignedIn": "Keep me signed in",
     "rememberDevice": "Remember this device for {n} days",
-    "rememberHint": "You’ll still need your password here, just not a code. Don’t tick this on a shared computer."
+    "rememberHint": "You’ll still need your password here, just not a code. Don’t tick this on a shared computer.",
+    "companyPending": "Your company is waiting for approval. You can sign in once it’s approved.",
+    "companySuspended": "Your company’s access is suspended. Contact the Mahamm team.",
+    "companyClosed": "Your company can’t use Mahamm. Contact the Mahamm team."
   },
   "setup": {
     "title": "Set up the workspace",
@@ -1038,5 +1049,70 @@
     "closeNote": "Trainees can’t close tasks. When it’s finished, move it to Review and the reviewer will close it.",
     "assignNote": "As a trainee, you can only add or take off yourself. Other people stay as they are.",
     "notAllowed": "Trainees can’t do that."
+  },
+  "platform": {
+    "team": "The Mahamm team",
+    "title": "Companies",
+    "sub": "Every company on Mahamm. You see names, plans and counts, never their tasks.",
+    "setupTitle": "Create the platform admin",
+    "setupDisabled": "Platform set-up is turned off. Set PLATFORM_SETUP_TOKEN to use it.",
+    "setupSub": "This account runs Mahamm itself: companies, plans and approvals. It is separate from any company account.",
+    "setupToken": "Platform set-up token",
+    "setupAfter": "You will set up two-step verification next.",
+    "setupCreate": "Create platform admin",
+    "badDetails": "Check the details and try again.",
+    "twoStepRequired": "The platform admin always uses two-step verification. Set it up to continue.",
+    "loginTitle": "Platform sign-in",
+    "loginSub": "For running Mahamm. To use your company, sign in on the normal sign-in page.",
+    "signedInAs": "Platform admin: {name}",
+    "company": "Company",
+    "plan": "Plan",
+    "status": "Status",
+    "people": "People",
+    "openTasks": "Open tasks",
+    "created": "Created",
+    "none": "No companies yet.",
+    "back": "← All companies",
+    "counts": "{people} people with an account, {without} without · {open} open tasks of {all}",
+    "privacy": "You can change the name, plan and status. Their tasks, comments, files and people stay private to them.",
+    "name": "Company name",
+    "rename": "Rename",
+    "setPlan": "Change plan",
+    "confirm": {
+      "approve": "Approve this company? Its people can start using Mahamm.",
+      "reject": "Turn this company down?",
+      "suspend": "Suspend this company? Its people are signed out and can’t sign in.",
+      "reactivate": "Open this company again?"
+    },
+    "move": {
+      "approve": "Approve",
+      "reject": "Turn down",
+      "suspend": "Suspend",
+      "reactivate": "Reactivate"
+    },
+    "history": "What the Mahamm team changed",
+    "noHistory": "Nothing changed yet.",
+    "act": {
+      "org": {
+        "renamed": "renamed the company",
+        "plan_changed": "changed the plan",
+        "status_changed": "changed the status"
+      }
+    },
+    "saved": "Saved.",
+    "notNow": "That isn’t possible in the company’s current status."
+  },
+  "plan": {
+    "hobbyist": "Hobbyist",
+    "personal": "Personal",
+    "team": "Team",
+    "enterprise": "Enterprise",
+    "custom": "Custom"
+  },
+  "companyStatus": {
+    "pending": "Waiting for approval",
+    "active": "Active",
+    "suspended": "Suspended",
+    "rejected": "Turned down"
   }
 }

@@ -45,7 +45,8 @@ export function csrfUnlessMultipart(req, res, next) {
   return csrfProtection(req, res, next);
 }
 
-const USER_COLUMNS = 'id, org_id, email, name, role, status, lang, email_notifications, totp_enabled, password_changed_at, last_seen_at';
+const USER_COLUMNS = `id, org_id, email, name, role, status, lang, email_notifications, totp_enabled, password_changed_at, last_seen_at,
+  (SELECT o.status FROM organizations o WHERE o.id = users.org_id) AS org_status`;
 
 export async function findUserById(id) {
   const { rows } = await q(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [id]);
@@ -116,7 +117,9 @@ export function loadUser() {
     const user = await asSystem(() => findUserById(id));
     const tooOld = !req.session.createdAt || !user || Date.now() - req.session.createdAt > lifetimeMs(req.session, user.role);
     const stale = !user || req.session.pwv !== new Date(user.password_changed_at).toISOString();
-    if (!user || user.status !== 'active' || !user.email || tooOld || stale) {
+    // A company that is suspended or not yet approved signs its people out.
+    const companyClosed = user && user.org_status !== 'active';
+    if (!user || user.status !== 'active' || !user.email || tooOld || stale || companyClosed) {
       // Swap in a fresh, signed-out session (not none at all): later middleware
       // still needs one for the CSRF token and the chosen language.
       const lang = req.session.lang;

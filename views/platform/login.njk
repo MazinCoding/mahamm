@@ -1,0 +1,13 @@
+{% extends "bare.njk" %}
+{% block title %}{{ t('platform.loginTitle') }}{% endblock %}
+{% block content %}
+<h1>{{ t('platform.loginTitle') }}</h1>
+<p class="sub">{{ t('platform.loginSub') }}</p>
+{% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+<form class="form" method="post" action="/platform/login">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field"><label for="email">{{ t('auth.email') }}</label><input id="email" class="input" type="email" name="email" value="{{ email }}" autocomplete="username" maxlength="254" required dir="ltr" autofocus></div>
+  <div class="field"><label for="password">{{ t('auth.password') }}</label><input id="password" class="input" type="password" name="password" autocomplete="current-password" maxlength="256" required></div>
+  <button class="btn btn-primary btn-block" type="submit">{{ t('auth.signIn') }}</button>
+</form>
+{% endblock %}

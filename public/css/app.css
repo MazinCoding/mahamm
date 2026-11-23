@@ -391,6 +391,10 @@ input[type='file']::file-selector-button:hover { background: var(--column); }
 /* Sign-in pages */
 .bare { min-height: 100vh; }
 .auth-wrap { max-width: 440px; margin: 0 auto; padding: 40px 16px; }
+.auth-wrap.wide { max-width: 1000px; }
+.platform-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.platform-bar .who { font-size: 13px; color: var(--muted); }
+.platform-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .auth-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
 .auth-top .brand { padding: 0; }
 .auth-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 28px 24px; }

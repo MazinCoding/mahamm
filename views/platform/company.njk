@@ -1,0 +1,49 @@
+{% extends "bare.njk" %}
+{% block wrap %}wide{% endblock %}
+{% block title %}{{ company.name }}{% endblock %}
+{% block content %}
+{% include "platform/_bar.njk" %}
+<p><a class="link-sm" href="/platform">{{ t('platform.back') }}</a></p>
+<h1 dir="auto">{{ company.name }}</h1>
+<p class="sub">
+  <span class="chip {{ {'pending': 'c-amber', 'active': 'c-green', 'suspended': 'c-red', 'rejected': 'c-gray'}[company.status] }}">{{ t('companyStatus.' + company.status) }}</span>
+  · {{ t('plan.' + company.plan) }}
+  · {{ t('platform.counts', { people: company.people, without: company.without_account, open: company.open_tasks, all: company.all_tasks }) }}
+</p>
+<p class="hint">{{ t('platform.privacy') }}</p>
+
+<form class="form" method="post" action="/platform/companies/{{ company.id }}/rename">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field"><label for="name">{{ t('platform.name') }}</label><input id="name" class="input" name="name" value="{{ company.name }}" maxlength="100" required dir="auto"></div>
+  <button class="btn btn-secondary" type="submit">{{ t('platform.rename') }}</button>
+</form>
+
+<form class="form" method="post" action="/platform/companies/{{ company.id }}/plan">
+  <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+  <div class="field">
+    <label for="plan">{{ t('platform.plan') }}</label>
+    <select id="plan" class="input" name="plan">{% for p in plans %}<option value="{{ p }}" {% if p == company.plan %}selected{% endif %}>{{ t('plan.' + p) }}</option>{% endfor %}</select>
+  </div>
+  <button class="btn btn-secondary" type="submit">{{ t('platform.setPlan') }}</button>
+</form>
+
+<div class="platform-actions">
+  {% set moves = {'pending': ['approve', 'reject'], 'active': ['suspend'], 'suspended': ['reactivate'], 'rejected': ['reactivate']}[company.status] %}
+  {% for move in moves %}
+  <form method="post" action="/platform/companies/{{ company.id }}/status" class="inline" data-confirm="{{ t('platform.confirm.' + move) }}">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <input type="hidden" name="action" value="{{ move }}">
+    <button class="btn {{ 'btn-primary' if move in ['approve', 'reactivate'] else 'btn-secondary' }}" type="submit">{{ t('platform.move.' + move) }}</button>
+  </form>
+  {% endfor %}
+</div>
+
+<h2>{{ t('platform.history') }}</h2>
+<ul class="list-plain">
+  {% for h in company.history %}
+  <li><span class="muted nowrap">{{ fmt.day(h.at) }}</span> · <bdi>{{ h.admin_name or t('common.system') }}</bdi>: {{ t('platform.act.' + h.action) }}{% if h.details.to %} → {{ t('plan.' + h.details.to) if h.action == 'org.plan_changed' else (t('companyStatus.' + h.details.to) if h.action == 'org.status_changed' else h.details.to) }}{% endif %}</li>
+  {% else %}
+  <li class="muted">{{ t('platform.noHistory') }}</li>
+  {% endfor %}
+</ul>
+{% endblock %}
