@@ -160,8 +160,12 @@ describe('the connector keeps organizations apart', () => {
     const token = await connectApp(app, memberB, RETURN);
     const call = async (name, args) => (await request(app).post('/connector').set('Authorization', `Bearer ${token}`)
       .send({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } })).body.result;
-    const other = await call('get_task', { task_id: taskA });
-    assert.equal(other.isError, true);
+    // #1 here is this company's own #1, never the other company's.
+    const own = JSON.stringify(await call('get_task', { task_id: taskA }));
+    assert.match(own, /Bravo task/);
+    assert.doesNotMatch(own, /Alpha secret plan/);
+    const missing = await call('get_task', { task_id: 999 });
+    assert.equal(missing.isError, true);
     const team = await call('get_team', {});
     const text = JSON.stringify(team);
     assert.doesNotMatch(text, /Alpha/);
