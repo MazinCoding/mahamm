@@ -93,7 +93,8 @@ export async function createCode({ clientId, userId, redirectUri, codeChallenge,
 }
 
 // Only people with an active account can hold a connection.
-const ACCOUNT_OK = "u.status = 'active' AND u.email IS NOT NULL";
+// The person can sign in and their company is open.
+const ACCOUNT_OK = "u.status = 'active' AND u.email IS NOT NULL AND EXISTS (SELECT 1 FROM organizations o WHERE o.id = u.org_id AND o.status = 'active')";
 
 async function issueTokens(db, grantId, role, withRefresh) {
   const access = newToken();

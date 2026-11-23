@@ -1,0 +1,24 @@
+{% extends "bare.njk" %}
+{% block title %}{{ t('platform.setupTitle') }}{% endblock %}
+{% block content %}
+<h1>{{ t('platform.setupTitle') }}</h1>
+{% if not enabled %}
+  <p>{{ t('platform.setupDisabled') }}</p>
+{% else %}
+  <p class="sub">{{ t('platform.setupSub') }}</p>
+  {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+  <form class="form" method="post" action="/platform/setup">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <div class="field">
+      <label for="setup_token">{{ t('platform.setupToken') }}</label>
+      <input id="setup_token" class="input" type="password" name="setup_token" autocomplete="off" required dir="ltr">
+    </div>
+    <div class="field"><label for="name">{{ t('settings.name') }}</label><input id="name" class="input" name="name" value="{{ name }}" maxlength="100" required dir="auto"></div>
+    <div class="field"><label for="email">{{ t('auth.email') }}</label><input id="email" class="input" type="email" name="email" value="{{ email }}" autocomplete="username" maxlength="254" required dir="ltr"></div>
+    <div class="field"><label for="password">{{ t('settings.newPassword') }}</label><input id="password" class="input" type="password" name="password" autocomplete="new-password" minlength="12" maxlength="128" required></div>
+    <div class="field"><label for="confirm">{{ t('settings.confirmPassword') }}</label><input id="confirm" class="input" type="password" name="confirm" autocomplete="new-password" minlength="12" maxlength="128" required></div>
+    <p class="hint">{{ t('password.rules') }} {{ t('platform.setupAfter') }}</p>
+    <button class="btn btn-primary btn-block" type="submit">{{ t('platform.setupCreate') }}</button>
+  </form>
+{% endif %}
+{% endblock %}

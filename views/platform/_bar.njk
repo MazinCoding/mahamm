@@ -1,0 +1,7 @@
+<div class="platform-bar">
+  <span class="who">{{ t('platform.signedInAs', { name: platformAdmin.name }) }}</span>
+  <form method="post" action="/platform/logout" class="inline">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <button class="btn btn-link" type="submit">{{ t('nav.signOut') }}</button>
+  </form>
+</div>

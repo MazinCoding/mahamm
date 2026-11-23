@@ -13,6 +13,7 @@ export const GROUPS = {
     'user.invited', 'invite.revoked', 'invite.accepted', 'user.role_changed', 'user.disabled', 'user.enabled',
     'person.added', 'person.renamed',
     'user.reset_link_created', 'label.created', 'label.updated', 'audit.exported', 'settings.wip_limit_changed',
+    'org.renamed', 'org.plan_changed', 'org.status_changed',
   ],
 };
 
@@ -87,6 +88,9 @@ function sentence(ev, t, { names = {}, labels = {} } = {}) {
     }
     case 'import.completed': return t('ev.importCompleted', { count: d.count ?? 0, skipped: d.skipped ?? 0, file: d.file || '' });
     case 'setup.completed': return t('ev.setup');
+    case 'org.renamed': return t('ev.orgRenamed', { from: clip(d.from), to: clip(d.to) });
+    case 'org.plan_changed': return t('ev.orgPlanChanged', { from: t(`plan.${d.from}`), to: t(`plan.${d.to}`) });
+    case 'org.status_changed': return t('ev.orgStatusChanged', { from: t(`companyStatus.${d.from}`), to: t(`companyStatus.${d.to}`) });
     case 'auth.signed_in': return d.two_factor === 'remembered_device' ? t('ev.signedInRemembered') : t('ev.signedIn');
     case 'auth.signin_paused': return t('ev.signinPaused', { email: d.email || '' });
     case 'auth.password_changed': return t('ev.passwordChanged');

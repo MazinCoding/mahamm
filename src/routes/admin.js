@@ -104,7 +104,7 @@ export default function adminRoutes(config) {
     const lines = [['time_utc', 'actor', 'actor_email', 'action', 'task_id', 'task_title', 'details', 'ip'].map(csvCell).join(',')];
     for (const e of rows) {
       lines.push([
-        new Date(e.at).toISOString(), e.actor_name || 'System', e.actor_email || '', e.action, e.task_id ?? '', e.task_title || '',
+        new Date(e.at).toISOString(), e.actor_name || (e.details?.by === 'platform' ? 'The Mahamm team' : 'System'), e.actor_email || '', e.action, e.task_id ?? '', e.task_title || '',
         describe(e, t, { names, labels: labelNames }), e.ip || '',
       ].map(csvCell).join(','));
     }

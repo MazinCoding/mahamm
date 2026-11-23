@@ -19,6 +19,7 @@ const schema = z.object({
   SESSION_SECRET_PREVIOUS: z.string().min(32).optional(),
   DATA_ENCRYPTION_KEY: z.string().min(32),
   SETUP_TOKEN: z.string().min(24).optional(),
+  PLATFORM_SETUP_TOKEN: z.string().min(24).optional(),
 
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
@@ -104,6 +105,7 @@ export function loadConfig(env = process.env) {
     sessionSecrets: [c.SESSION_SECRET, c.SESSION_SECRET_PREVIOUS].filter(Boolean),
     dataKey: c.DATA_ENCRYPTION_KEY,
     setupToken: c.SETUP_TOKEN || null,
+    platformSetupToken: c.PLATFORM_SETUP_TOKEN || null,
     smtp: smtpSet.length === smtpKeys.length
       ? { host: c.SMTP_HOST, port: c.SMTP_PORT, user: c.SMTP_USER, pass: c.SMTP_PASS, from: c.SMTP_FROM }
       : null,

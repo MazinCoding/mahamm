@@ -14,6 +14,7 @@ import { httpsRedirect, sameOriginWrites, securityHeaders } from './security.js'
 import { TRAINEE_ASSIGN, TRAINEE_CLOSE, isAdmin, isTrainee } from './roles.js';
 import { rejectUnexpectedMultipart } from './uploads.js';
 import authRoutes from './routes/auth.js';
+import platformRoutes from './routes/platform.js';
 import taskRoutes from './routes/tasks.js';
 import previewRoutes from './routes/previews.js';
 import adminRoutes from './routes/admin.js';
@@ -153,6 +154,7 @@ export function createApp(config, logger) {
   app.use(enforceAdminTwoFactor);
 
   app.use(authRoutes(config));
+  app.use(platformRoutes(config));
   app.use(meRoutes(config));
   app.use(homeRoutes(config));
   app.use(oauthConsentRoutes(config));

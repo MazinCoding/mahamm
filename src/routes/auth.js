@@ -45,7 +45,10 @@ export default function authRoutes(config) {
     // Emails are unique across the whole app, so the account is found first
     // and the rest of the sign-in runs in its organization.
     const user = email
-      ? await asSystem(() => one('SELECT id, org_id, email, name, role, password_hash, status, totp_enabled, password_changed_at FROM users WHERE email = $1', [email]))
+      ? await asSystem(() => one(
+        `SELECT u.id, u.org_id, u.email, u.name, u.role, u.password_hash, u.status, u.totp_enabled, u.password_changed_at, o.status AS org_status
+         FROM users u JOIN organizations o ON o.id = u.org_id WHERE u.email = $1`, [email],
+      ))
       : null;
     if (user) setOrg(user.org_id);
     let ok = false;
@@ -61,6 +64,11 @@ export default function authRoutes(config) {
       return fail(count >= MAX_FAILS ? 'auth.paused' : 'auth.invalid', count >= MAX_FAILS ? 429 : 401);
     }
     await clear(failKey);
+    // Right password, but the company is waiting for approval, suspended or turned down.
+    if (user.org_status !== 'active') {
+      const key = { pending: 'auth.companyPending', suspended: 'auth.companySuspended' }[user.org_status] || 'auth.companyClosed';
+      return fail(key, 403);
+    }
     if (needsRehash(user.password_hash)) {
       await q('UPDATE users SET password_hash = $2 WHERE id = $1', [user.id, await hashPassword(password)]);
     }

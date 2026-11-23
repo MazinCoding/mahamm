@@ -16,7 +16,7 @@
 <script src="/static/js/app.js" defer></script>
 </head>
 <body class="bare">
-<div class="auth-wrap">
+<div class="auth-wrap {% block wrap %}{% endblock %}">
   <div class="auth-top">
     <span class="brand">
       <span class="brand-mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
@@ -31,6 +31,7 @@
     </form>
     {% endif %}
   </div>
+  {% if flash %}<div class="flash flash-{{ flash.type }}" role="status">{{ flash.text }}</div>{% endif %}
   <main class="auth-card" id="main">
     {% block content %}{% endblock %}
   </main>
