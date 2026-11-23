@@ -24,11 +24,14 @@ before(async () => {
 after(teardown);
 beforeEach(resetLimits);
 
-const whoIs = async (agent) => {
+// Who is the current account, and the page itself (one load: a message on the
+// page is shown once).
+const homeOf = async (agent) => {
   const res = await agent.get('/home');
-  if (res.status !== 200) return null;
-  return res.text.match(/<span class="me-name">([^<]+)<\/span>/)?.[1] ?? null;
+  if (res.status !== 200) return { who: null, text: '' };
+  return { who: res.text.match(/<span class="me-name">([^<]+)<\/span>/)?.[1] ?? null, text: res.text };
 };
+const whoIs = async (agent) => (await homeOf(agent)).who;
 const send = async (agent, path, body, from = '/home') => {
   const page = await agent.get(from);
   return agent.post(path).type('form').send({ _csrf: csrfIn(page.text), ...body });
@@ -89,9 +92,10 @@ describe('signed in to several accounts', () => {
   test('signing out of one account leaves the others; signing out of all ends them all', async () => {
     const agent = await signIn(app, alice);
     await addAccount(agent, bob);
-    await send(agent, '/logout', {});
-    assert.equal(await whoIs(agent), 'Alice First');
-    assert.match((await agent.get('/home')).text, /Signed out of Bob Second/);
+    await send(agent, '/logout', {}, '/board');
+    const after = await homeOf(agent);
+    assert.equal(after.who, 'Alice First');
+    assert.match(after.text, /Signed out of Bob Second/);
     await addAccount(agent, bob);
     await send(agent, '/logout/all', {});
     assert.equal(await whoIs(agent), null);
@@ -100,10 +104,11 @@ describe('signed in to several accounts', () => {
 
   test('switching to an account that isn\'t signed in here does nothing', async () => {
     const agent = await signIn(app, alice);
-    const res = await send(agent, '/accounts/switch', { to: bob.id });
+    const res = await send(agent, '/accounts/switch', { to: bob.id }, '/board');
     assert.equal(res.headers.location, '/home');
-    assert.equal(await whoIs(agent), 'Alice First');
-    assert.match((await agent.get('/home')).text, /isn’t signed in here/);
+    const after = await homeOf(agent);
+    assert.equal(after.who, 'Alice First');
+    assert.match(after.text, /isn’t signed in here/);
   });
 
   test('at most five accounts', async () => {
@@ -114,7 +119,7 @@ describe('signed in to several accounts', () => {
     }
     const res = await agent.get('/login?add=1');
     assert.equal(res.headers.location, '/home');
-    assert.match((await agent.get('/home')).text, /5 accounts at most/);
+    assert.match((await homeOf(agent)).text, /5 accounts at most/);
   });
 });
 
@@ -135,8 +140,9 @@ describe('when one account ends', () => {
     await addAccount(agent, bob);
     await q(`UPDATE organizations SET status = 'suspended' WHERE id = $1`, [ORG2]);
     try {
-      assert.equal(await whoIs(agent), 'Alice First');
-      assert.match((await agent.get('/home')).text, /still signed in to the others|One of your accounts/);
+      const after = await homeOf(agent);
+      assert.equal(after.who, 'Alice First');
+      assert.match(after.text, /One of your accounts was signed out/);
     } finally {
       await q(`UPDATE organizations SET status = 'active' WHERE id = $1`, [ORG2]);
     }
