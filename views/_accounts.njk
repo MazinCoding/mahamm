@@ -1,0 +1,32 @@
+{# The signed-in accounts: the current one, the others to switch to, and sign-out. #}
+<div class="accounts">
+  <div class="account-current">
+    <span class="av {{ avatarClass(user.id) }}" aria-hidden="true">{{ initials(user.name) }}</span>
+    <span class="account-text"><bdi class="account-name">{{ user.name }}</bdi><bdi class="account-org">{{ user.orgName }}</bdi></span>
+  </div>
+  <a class="account-link" href="/settings">{{ t('nav.settings') }}</a>
+  {% if accounts.length %}
+  <p class="account-heading">{{ t('accounts.switchTo') }}</p>
+  {% for a in accounts %}
+  <form method="post" action="/accounts/switch" class="account-switch">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <input type="hidden" name="to" value="{{ a.userId }}">
+    <button type="submit" class="account-other">
+      <span class="av {{ avatarClass(a.userId) }}" aria-hidden="true">{{ initials(a.name or '?') }}</span>
+      <span class="account-text"><bdi class="account-name">{{ a.name or t('accounts.unknown') }}</bdi><bdi class="account-org">{{ a.orgName or '' }}</bdi></span>
+    </button>
+  </form>
+  {% endfor %}
+  {% endif %}
+  {% if accounts.length < maxAccounts - 1 %}<a class="account-link" href="/accounts/add">{{ t('accounts.add') }}</a>{% endif %}
+  <form method="post" action="/logout" class="inline">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <button class="btn btn-link btn-sm" type="submit">{{ t('accounts.signOutThis') if accounts.length else t('nav.signOut') }}</button>
+  </form>
+  {% if accounts.length %}
+  <form method="post" action="/logout/all" class="inline">
+    <input type="hidden" name="_csrf" value="{{ csrfToken }}">
+    <button class="btn btn-link btn-sm" type="submit">{{ t('accounts.signOutAll') }}</button>
+  </form>
+  {% endif %}
+</div>

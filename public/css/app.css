@@ -575,3 +575,20 @@ dialog.sheet .added-panel { flex: 1 1 auto; min-height: 0; display: flex; flex-d
 .match-task { display: block; margin-top: 6px; font-weight: 600; overflow-wrap: anywhere; }
 .match-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .match-actions .btn { min-height: 40px; }
+
+/* Account menu: the signed-in accounts and switching between them. */
+.account-menu { position: relative; }
+.account-menu > summary { list-style: none; cursor: pointer; }
+.account-menu > summary::-webkit-details-marker { display: none; }
+.account-panel { position: absolute; inset-inline-end: 0; top: calc(100% + 8px); z-index: 30; width: 280px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(16, 24, 40, .12); padding: 12px; }
+.accounts { display: flex; flex-direction: column; gap: 6px; }
+.account-current, .account-other { display: flex; align-items: center; gap: 10px; }
+.account-other { width: 100%; background: none; border: 0; padding: 6px; border-radius: 8px; cursor: pointer; text-align: start; font: inherit; color: var(--text); }
+.account-other:hover, .account-other:focus-visible { background: var(--subtle); }
+.account-text { display: flex; flex-direction: column; min-width: 0; }
+.account-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-org { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-heading { font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+.account-link { font-size: 13px; padding: 4px 6px; }
+.account-switch { margin: 0; }
+.menu-accounts { margin-top: 12px; }

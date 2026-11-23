@@ -1,6 +1,6 @@
 import express from 'express';
 import { audit } from '../audit.js';
-import { destroySession, startPendingSession, startSession } from '../auth.js';
+import { MAX_ACCOUNTS, destroySession, dropCurrentAccount, otherAccounts, rotateCsrf, startPendingSession, startSession, switchAccount } from '../auth.js';
 import { rememberDays, rememberDevice, validDevice } from '../devices.js';
 import { decryptField, hashRecoveryCode, hashToken, safeEqual } from '../crypto.js';
 import { asSystem, one, q, scopeTo, setOrg, tx } from '../db.js';
@@ -25,10 +25,18 @@ const ticked = (v) => v === 'on' || v === '1';
 export default function authRoutes(config) {
   const r = express.Router();
 
+  // Adding another account keeps the ones already signed in (see src/auth.js).
+  const adding = (req) => !!req.user && (req.query.add === '1' || req.body?.add === '1');
+  const full = (req) => otherAccounts(req).length >= MAX_ACCOUNTS - 1;
+
   r.get('/login', async (req, res) => {
-    if (req.user) return res.redirect('/home');
+    if (req.user && !adding(req)) return res.redirect('/home');
+    if (adding(req) && full(req)) {
+      req.session.flash = { type: 'warn', text: req.t('accounts.full', { n: MAX_ACCOUNTS }) };
+      return res.redirect('/home');
+    }
     if ((await asSystem(userCount)) === 0) return res.redirect('/setup');
-    res.render('auth/login.njk', { next: safeLocalPath(req.query.next, ''), email: '' });
+    res.render('auth/login.njk', { next: safeLocalPath(req.query.next, ''), email: '', add: adding(req) });
   });
 
   r.post('/login', async (req, res) => {
@@ -36,7 +44,8 @@ export default function authRoutes(config) {
     const password = readPassword(req.body.password);
     const next = safeLocalPath(req.body.next, '');
     const keep = ticked(req.body.keep);
-    const fail = (key, status) => res.status(status).render('auth/login.njk', { next, email, keep, error: req.t(key) });
+    const add = adding(req) && !full(req);
+    const fail = (key, status) => res.status(status).render('auth/login.njk', { next, email, keep, add, error: req.t(key) });
 
     await enforce(`login-ip:${req.ip}`, 30, FAIL_WINDOW);
     const failKey = `login-fail:${hashToken(email)}`;
@@ -76,19 +85,20 @@ export default function authRoutes(config) {
       // A browser remembered after an earlier code skips the code, never the password.
       const device = await validDevice(req, config, user);
       if (device) {
-        await startSession(req, user, { keep });
+        await startSession(req, user, { keep, add });
         await audit({ query: q }, {
           actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, details: { two_factor: 'remembered_device', device: device.id }, ip: req.ip,
         });
         return res.redirect(next || '/home');
       }
-      await startPendingSession(req, user);
+      await startPendingSession(req, user, { add });
       req.session.pendingNext = next;
       req.session.pendingKeep = keep;
+      req.session.pendingAdd = add;
       req.session.pendingRole = user.role;
       return res.redirect('/login/two-factor');
     }
-    await startSession(req, user, { keep });
+    await startSession(req, user, { keep, add });
     await audit({ query: q }, { actorId: user.id, action: 'auth.signed_in', subjectUserId: user.id, ip: req.ip });
     return res.redirect(next || '/home');
   });
@@ -114,11 +124,14 @@ export default function authRoutes(config) {
       await destroySession(req);
       return res.status(429).render('auth/login.njk', { next: '', email: '', error: req.t('auth.paused') });
     }
-    const user = await one(
-      'SELECT id, email, name, role, totp_secret_enc, totp_last_step, recovery_codes, password_changed_at FROM users WHERE id = $1 AND status = $2',
+    // Found across organizations: while adding an account, the request still
+    // belongs to the account already signed in.
+    const user = await asSystem(() => one(
+      'SELECT id, org_id, email, name, role, totp_secret_enc, totp_last_step, recovery_codes, password_changed_at FROM users WHERE id = $1 AND status = $2',
       [userId, 'active'],
-    );
+    ));
     if (!user || !user.totp_secret_enc) return res.redirect('/login');
+    setOrg(user.org_id);
     const code = cleanLine(req.body.code).slice(0, 40);
     let ok = false;
     let usedRecovery = false;
@@ -141,7 +154,9 @@ export default function authRoutes(config) {
     if (!ok) return res.status(401).render('auth/two-factor.njk', { remember, days: rememberDays(user.role), error: req.t('auth.badCode') });
     const next = safeLocalPath(req.session.pendingNext, '');
     const keep = req.session.pendingKeep === true;
-    await startSession(req, user, { keep });
+    const add = req.session.pendingAdd === true && !!req.user;
+    for (const key of ['pendingUserId', 'pendingAt', 'pendingNext', 'pendingKeep', 'pendingRole', 'pendingAdd']) delete req.session[key];
+    await startSession(req, user, { keep, add });
     await clear(`2fa:${userId}`);
     if (remember) {
       const device = await rememberDevice(req, res, config, user);
@@ -155,10 +170,40 @@ export default function authRoutes(config) {
     return res.redirect(next || '/home');
   });
 
+  // Signs out of the current account; any other signed-in account takes over.
   r.post('/logout', async (req, res) => {
+    if (req.user && dropCurrentAccount(req)) {
+      rotateCsrf(req);
+      req.session.flash = { type: 'ok', text: req.t('accounts.signedOutOne', { name: req.user.name }) };
+      return res.redirect('/home');
+    }
     await destroySession(req);
     res.clearCookie(config.isProd ? '__Host-mahamm.sid' : 'mahamm.sid', { path: '/', secure: config.isProd, httpOnly: true, sameSite: 'lax' });
     res.redirect('/login');
+  });
+
+  r.post('/logout/all', async (req, res) => {
+    await destroySession(req);
+    res.clearCookie(config.isProd ? '__Host-mahamm.sid' : 'mahamm.sid', { path: '/', secure: config.isProd, httpOnly: true, sameSite: 'lax' });
+    res.redirect('/login');
+  });
+
+  r.get('/accounts/add', (req, res) => {
+    if (!req.user) return res.redirect('/login');
+    return res.redirect('/login?add=1');
+  });
+
+  // Switching changes the form token too, so a page left open from the other
+  // account can't act as this one.
+  r.post('/accounts/switch', async (req, res) => {
+    if (!req.user) return res.redirect('/login');
+    const to = String(req.body.to || '');
+    if (!switchAccount(req, to)) {
+      req.session.flash = { type: 'warn', text: req.t('accounts.notSignedIn') };
+      return res.redirect('/home');
+    }
+    rotateCsrf(req);
+    res.redirect('/home');
   });
 
   r.get('/forgot', (req, res) => res.render('auth/forgot.njk', { sent: false }));
